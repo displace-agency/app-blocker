@@ -1,0 +1,12 @@
+# Build artifacts
+.build/
+build/
+
+# macOS
+.DS_Store
+
+# Editors
+*.swp
+
+# Swift Package Manager
+.swiftpm/

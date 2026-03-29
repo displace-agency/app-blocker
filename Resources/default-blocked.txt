@@ -1,0 +1,10 @@
+# FocusGuard Default Blocklist
+# One domain per line. Lines starting with # are comments.
+
+youtube.com
+m.youtube.com
+youtu.be
+youtube-nocookie.com
+ytimg.com
+i.ytimg.com
+yt3.ggpht.com
