@@ -20,13 +20,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var statusItem: NSStatusItem!
     private var popover: NSPopover!
     private let daemon = DaemonClient()
+    private var onboardingWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Create the status bar item
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
 
         if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "shield.checkered", accessibilityDescription: "FocusGuard")
+            let image = NSImage(systemSymbolName: "shield.checkered", accessibilityDescription: "FocusGuard")
+            image?.isTemplate = true
+            button.image = image
             button.action = #selector(togglePopover)
             button.target = self
         }
@@ -46,6 +49,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                 self?.updateIcon(for: status)
             }
         }
+
+        // Show onboarding on first launch
+        let hasCompleted = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
+        if !hasCompleted {
+            showOnboarding()
+        }
+    }
+
+    private func showOnboarding() {
+        let onboardingView = OnboardingView(daemon: daemon) { [weak self] in
+            self?.dismissOnboarding()
+        }
+
+        let hostingController = NSHostingController(rootView: onboardingView)
+        let window = NSWindow(contentViewController: hostingController)
+        window.setContentSize(NSSize(width: 600, height: 500))
+        window.styleMask = [.titled, .closable, .fullSizeContentView]
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
+        window.isMovableByWindowBackground = true
+        window.backgroundColor = NSColor(red: 0.102, green: 0.102, blue: 0.102, alpha: 1)
+        window.center()
+        window.isReleasedWhenClosed = false
+        window.level = .floating
+        window.title = "FocusGuard"
+
+        self.onboardingWindow = window
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func dismissOnboarding() {
+        onboardingWindow?.close()
+        onboardingWindow = nil
     }
 
     @objc private func togglePopover() {
@@ -69,9 +106,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         case .unlocked:
             symbolName = "shield.slash"
         }
-        statusItem.button?.image = NSImage(
+        let image = NSImage(
             systemSymbolName: symbolName,
             accessibilityDescription: "FocusGuard - \(status.rawValue)"
         )
+        image?.isTemplate = true
+        statusItem.button?.image = image
     }
 }
