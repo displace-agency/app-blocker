@@ -36,6 +36,21 @@ FocusGuard runs as a system-level LaunchDaemon (not a regular app), making it in
 
 Domain deletion is only available during the unlocked window.
 
+## Preset Groups
+
+Click "Groups" in the menu bar popover to block entire categories with one click:
+
+| Group | Sites | Examples |
+|-------|-------|----------|
+| Social Media | 15 | X, Facebook, Instagram, TikTok, Reddit, Discord |
+| Video | 12 | YouTube, Twitch, Vimeo, Dailymotion |
+| News | 50 | CNN, BBC, NYT, Guardian, Reuters, Bloomberg |
+| Streaming | 19 | Netflix, Disney+, HBO Max, Hulu, Prime Video |
+| Gaming | 20 | Steam, Epic Games, Riot, Blizzard, Roblox |
+| Shopping | 20 | Amazon, eBay, AliExpress, Shein, Temu, Zara |
+
+Groups show a checkmark when all domains are already blocked. You can add remaining domains from a partially blocked group with one click.
+
 ## Installation
 
 ### From Source
@@ -43,7 +58,7 @@ Domain deletion is only available during the unlocked window.
 Requires Xcode Command Line Tools (`xcode-select --install`).
 
 ```bash
-git clone https://github.com/santiagolobov/app-blocker.git
+git clone https://github.com/displace-agency/app-blocker.git
 cd app-blocker
 bash Scripts/build.sh
 sudo bash Scripts/install.sh

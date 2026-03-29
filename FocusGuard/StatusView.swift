@@ -5,18 +5,25 @@ struct StatusView: View {
     @ObservedObject var daemon: DaemonClient
     @State private var newDomain = ""
     @State private var showUnlockConfirmation = false
+    @State private var showGroups = false
 
     var body: some View {
         VStack(spacing: 0) {
             headerSection
             Divider()
-            blockedSitesList
+
+            if showGroups {
+                groupsSection
+            } else {
+                blockedSitesList
+            }
+
             Divider()
             actionButtons
             Divider()
             footerSection
         }
-        .frame(width: 300)
+        .frame(width: 320)
         .sheet(isPresented: $showUnlockConfirmation) {
             UnlockConfirmationView(
                 isPresented: $showUnlockConfirmation,
@@ -30,13 +37,18 @@ struct StatusView: View {
 
     private var headerSection: some View {
         VStack(spacing: 8) {
-            Text("FocusGuard")
-                .font(.headline)
-                .fontWeight(.bold)
+            HStack {
+                Image(systemName: "shield.checkered")
+                    .font(.title2)
+                    .foregroundColor(statusColor)
+                Text("FocusGuard")
+                    .font(.headline)
+                    .fontWeight(.bold)
+            }
 
             statusBadge
 
-            // Daily budget indicator
+            // Daily budget
             HStack(spacing: 4) {
                 ForEach(0..<daemon.maxUnlocksPerDay, id: \.self) { i in
                     Circle()
@@ -49,6 +61,14 @@ struct StatusView: View {
             }
         }
         .padding()
+    }
+
+    private var statusColor: Color {
+        switch daemon.status {
+        case .locked: return .green
+        case .unlockPending: return .orange
+        case .unlocked: return .red
+        }
     }
 
     @ViewBuilder
@@ -106,13 +126,28 @@ struct StatusView: View {
 
     private var blockedSitesList: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Blocked Sites")
-                .font(.subheadline)
-                .fontWeight(.medium)
-                .foregroundColor(.secondary)
-                .padding(.horizontal)
-                .padding(.top, 12)
-                .padding(.bottom, 6)
+            HStack {
+                Text("Blocked Sites (\(daemon.blockedDomains.count))")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(.secondary)
+
+                Spacer()
+
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        showGroups = true
+                    }
+                } label: {
+                    Label("Groups", systemImage: "square.grid.2x2")
+                        .font(.caption)
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(.accentColor)
+            }
+            .padding(.horizontal)
+            .padding(.top, 12)
+            .padding(.bottom, 6)
 
             if daemon.blockedDomains.isEmpty {
                 Text("No sites blocked")
@@ -128,7 +163,7 @@ struct StatusView: View {
                         }
                     }
                 }
-                .frame(maxHeight: 200)
+                .frame(maxHeight: 180)
             }
 
             addSiteRow
@@ -140,7 +175,7 @@ struct StatusView: View {
     private func domainRow(_ domain: String) -> some View {
         HStack {
             Text(domain)
-                .font(.system(.body, design: .monospaced))
+                .font(.system(.caption, design: .monospaced))
                 .lineLimit(1)
 
             Spacer()
@@ -151,27 +186,28 @@ struct StatusView: View {
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundColor(.secondary)
+                        .font(.caption)
                 }
                 .buttonStyle(.plain)
                 .help("Remove \(domain)")
             }
         }
         .padding(.horizontal)
-        .padding(.vertical, 4)
+        .padding(.vertical, 3)
     }
 
     private var addSiteRow: some View {
         HStack(spacing: 6) {
             TextField("Add site...", text: $newDomain)
                 .textFieldStyle(.roundedBorder)
-                .font(.system(.body, design: .monospaced))
+                .font(.system(.caption, design: .monospaced))
                 .onSubmit { addDomain() }
 
             Button {
                 addDomain()
             } label: {
                 Image(systemName: "plus.circle.fill")
-                    .font(.title3)
+                    .font(.body)
             }
             .buttonStyle(.plain)
             .disabled(newDomain.trimmingCharacters(in: .whitespaces).isEmpty)
@@ -185,6 +221,114 @@ struct StatusView: View {
         newDomain = ""
     }
 
+    // MARK: - Groups
+
+    private var groupsSection: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        showGroups = false
+                    }
+                } label: {
+                    Label("Back", systemImage: "chevron.left")
+                        .font(.caption)
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(.accentColor)
+
+                Spacer()
+
+                Text("Quick Add Groups")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(.secondary)
+            }
+            .padding(.horizontal)
+            .padding(.top, 12)
+            .padding(.bottom, 6)
+
+            ScrollView {
+                VStack(spacing: 4) {
+                    ForEach(DomainGroups.all) { group in
+                        groupRow(group)
+                    }
+                }
+                .padding(.horizontal)
+            }
+            .frame(maxHeight: 260)
+            .padding(.bottom, 8)
+        }
+    }
+
+    private func groupRow(_ group: DomainGroup) -> some View {
+        let blockedSet = Set(daemon.blockedDomains)
+        let alreadyBlocked = group.domains.filter { blockedSet.contains($0) }.count
+        let isFullyBlocked = alreadyBlocked == group.domains.count
+
+        return HStack(spacing: 10) {
+            Image(systemName: group.icon)
+                .font(.title3)
+                .foregroundColor(isFullyBlocked ? .green : .secondary)
+                .frame(width: 24)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(group.name)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+
+                Text("\(group.domains.count) sites")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+
+            Spacer()
+
+            if isFullyBlocked {
+                if daemon.status == .unlocked {
+                    Button("Remove") {
+                        for domain in group.domains {
+                            daemon.removeDomain(domain)
+                        }
+                    }
+                    .font(.caption)
+                    .buttonStyle(.bordered)
+                    .tint(.red)
+                    .controlSize(.small)
+                } else {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.green)
+                }
+            } else if alreadyBlocked > 0 {
+                Button("\(group.domains.count - alreadyBlocked) more") {
+                    for domain in group.domains {
+                        if !blockedSet.contains(domain) {
+                            daemon.addDomain(domain)
+                        }
+                    }
+                }
+                .font(.caption)
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            } else {
+                Button("Block All") {
+                    for domain in group.domains {
+                        daemon.addDomain(domain)
+                    }
+                }
+                .font(.caption)
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            }
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(isFullyBlocked ? Color.green.opacity(0.05) : Color.clear)
+        )
+    }
+
     // MARK: - Actions
 
     private var actionButtons: some View {
@@ -192,7 +336,6 @@ struct StatusView: View {
             switch daemon.status {
             case .locked:
                 if daemon.unlocksToday >= daemon.maxUnlocksPerDay {
-                    // Budget exhausted
                     Text("No unlocks remaining today")
                         .font(.caption)
                         .foregroundColor(.red)
@@ -207,7 +350,6 @@ struct StatusView: View {
                     .buttonStyle(.borderedProminent)
                     .disabled(true)
                 } else {
-                    // Show escalated delay info
                     if daemon.unlockDelay > FocusGuardConfig.defaultUnlockDelay {
                         Text("Wait time: \(daemon.unlockDelay / 60) min (escalated)")
                             .font(.caption)
@@ -238,7 +380,6 @@ struct StatusView: View {
 
             case .unlocked:
                 if let cooldown = daemon.cooldownSecondsRemaining, cooldown > 0 {
-                    // Show cooldown progress bar
                     ProgressView(value: Double(cooldown), total: Double(daemon.cooldownDuration))
                         .tint(.red)
                 }
@@ -261,26 +402,23 @@ struct StatusView: View {
 
     private var footerSection: some View {
         HStack {
-            if !daemon.isConnected {
-                Label("Daemon not running", systemImage: "exclamationmark.triangle")
-                    .font(.caption)
-                    .foregroundColor(.red)
-            } else {
-                Text("Daemon active")
-                    .font(.caption)
-                    .foregroundColor(.green)
-            }
+            Circle()
+                .fill(daemon.isConnected ? Color.green : Color.red)
+                .frame(width: 6, height: 6)
+            Text(daemon.isConnected ? "Daemon active" : "Daemon offline")
+                .font(.caption2)
+                .foregroundColor(.secondary)
 
             Spacer()
 
             Button("Quit App") {
                 NSApplication.shared.terminate(nil)
             }
-            .font(.caption)
+            .font(.caption2)
             .foregroundColor(.secondary)
             .buttonStyle(.plain)
         }
         .padding(.horizontal)
-        .padding(.vertical, 10)
+        .padding(.vertical, 8)
     }
 }
