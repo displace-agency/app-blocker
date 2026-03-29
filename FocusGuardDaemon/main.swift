@@ -17,7 +17,8 @@ let markerEnd = FocusGuardConfig.lockMarkerEnd
 
 func log(_ message: String) {
     let timestamp = ISO8601DateFormatter().string(from: Date())
-    FileHandle.standardError.write(Data("[\(timestamp)] \(message)\n".utf8))
+    let line = "[\(timestamp)] \(message)\n"
+    FileHandle.standardError.write(Data(line.utf8))
 }
 
 struct DaemonConfig {
@@ -65,8 +66,6 @@ func readUnlockHistory() -> UnlockHistory {
 }
 
 func writeUnlockHistory(_ history: UnlockHistory) {
-    unlockConfigDir()
-    defer { relockConfigDir() }
     if let data = try? JSONEncoder().encode(history) {
         FileManager.default.createFile(atPath: historyFile, contents: data)
     }
@@ -99,9 +98,7 @@ func recordUnlock() {
 func currentUnlockDelay(baseDelay: Int) -> Int {
     let count = unlocksToday()
     let multiplier = 1 << count // 2^count: 1x, 2x, 4x, 8x...
-    let delay = baseDelay * multiplier
-    log("Escalated delay: \(baseDelay)s * 2^\(count) = \(delay)s")
-    return delay
+    return baseDelay * multiplier
 }
 
 // MARK: - Cooldown (auto-relock timer)
@@ -115,8 +112,6 @@ func readCooldownEnd() -> Date? {
 }
 
 func writeCooldownEnd(_ date: Date) {
-    unlockConfigDir()
-    defer { relockConfigDir() }
     if let data = try? JSONEncoder().encode(date.timeIntervalSince1970) {
         FileManager.default.createFile(atPath: cooldownFile, contents: data)
         log("Cooldown set: auto-relock at \(date)")
@@ -124,14 +119,11 @@ func writeCooldownEnd(_ date: Date) {
 }
 
 func deleteCooldownFile() {
-    unlockConfigDir()
-    defer { relockConfigDir() }
     try? FileManager.default.removeItem(atPath: cooldownFile)
 }
 
 func readBlockedDomains() -> [String] {
     guard let contents = try? String(contentsOfFile: blockedFile, encoding: .utf8) else {
-        log("Could not read \(blockedFile)")
         return []
     }
     return contents
@@ -157,7 +149,6 @@ func runShell(_ command: String) {
 func flushDNS() {
     runShell("dscacheutil -flushcache")
     runShell("killall -HUP mDNSResponder")
-    log("DNS cache flushed")
 }
 
 // MARK: - Hosts File Management
@@ -177,7 +168,7 @@ func buildBlockEntries(for domains: [String]) -> String {
 
 func readHostsWithoutBlock() -> String {
     guard let contents = try? String(contentsOfFile: hostsFile, encoding: .utf8) else {
-        return ""
+        return "127.0.0.1\tlocalhost\n255.255.255.255\tbroadcasthost\n::1\tlocalhost\n"
     }
 
     var result: [String] = []
@@ -197,7 +188,6 @@ func readHostsWithoutBlock() -> String {
         }
     }
 
-    // Remove trailing empty lines that accumulate
     while result.last?.trimmingCharacters(in: .whitespaces).isEmpty == true {
         result.removeLast()
     }
@@ -208,11 +198,11 @@ func readHostsWithoutBlock() -> String {
 func writeBlocks(domains: [String]) {
     let clean = readHostsWithoutBlock()
     let block = buildBlockEntries(for: domains)
-    let final = clean + "\n\n" + block + "\n"
+    let content = clean + "\n\n" + block + "\n"
 
+    // Write directly (not atomically) to avoid temp file issues with protected dirs
     do {
-        try final.write(toFile: hostsFile, atomically: true, encoding: .utf8)
-        log("Wrote \(domains.count) domains to /etc/hosts")
+        try content.write(toFile: hostsFile, atomically: false, encoding: .utf8)
     } catch {
         log("Failed to write \(hostsFile): \(error)")
     }
@@ -220,11 +210,10 @@ func writeBlocks(domains: [String]) {
 
 func removeBlocks() {
     let clean = readHostsWithoutBlock()
-    let final = clean + "\n"
+    let content = clean + "\n"
 
     do {
-        try final.write(toFile: hostsFile, atomically: true, encoding: .utf8)
-        log("Removed all block entries from /etc/hosts")
+        try content.write(toFile: hostsFile, atomically: false, encoding: .utf8)
     } catch {
         log("Failed to write \(hostsFile): \(error)")
     }
@@ -241,33 +230,26 @@ func readUnlockRequestTime() -> Date? {
 }
 
 func writeUnlockFile() {
-    unlockConfigDir()
-    defer { relockConfigDir() }
     let timestamp = Date().timeIntervalSince1970
     if let data = try? JSONEncoder().encode(timestamp) {
         FileManager.default.createFile(atPath: unlockFile, contents: data)
-        log("Created unlock request file")
     }
 }
 
 func deleteUnlockFile() {
-    unlockConfigDir()
-    defer { relockConfigDir() }
     try? FileManager.default.removeItem(atPath: unlockFile)
-    log("Deleted unlock request file")
 }
 
 // MARK: - Status Reporting
 
 func writeStatus(_ status: StatusInfo) {
-    unlockConfigDir()
-    defer { relockConfigDir() }
     let encoder = JSONEncoder()
     encoder.dateEncodingStrategy = .iso8601
     encoder.outputFormatting = .prettyPrinted
 
     do {
         let data = try encoder.encode(status)
+        // Write directly, not atomically
         try data.write(to: URL(fileURLWithPath: statusFile))
     } catch {
         log("Failed to write status: \(error)")
@@ -275,33 +257,19 @@ func writeStatus(_ status: StatusInfo) {
 }
 
 // MARK: - File Protection (immutable flags)
+//
+// IMPORTANT: Only protect the app bundle. Do NOT lock:
+// - The daemon binary (prevents restarts/updates)
+// - The LaunchDaemon plist (prevents launchctl management)
+// - The config dir (the daemon needs to write status/history)
 
-/// Set system immutable flag on critical files so they can't be deleted
 func lockFiles() {
-    let paths = [
-        "/Applications/FocusGuard.app",
-        "/usr/local/bin/focusguard-daemon",
-        "/Library/LaunchDaemons/com.focusguard.blocker.plist",
-        "/etc/focusguard",
-    ]
-    for path in paths {
-        runShell("chflags -R schg '\(path)' 2>/dev/null")
-    }
-    log("Files locked (immutable)")
+    // Only lock the app bundle -- the most visible target for deletion
+    runShell("chflags -R schg /Applications/FocusGuard.app 2>/dev/null")
 }
 
-/// Remove immutable flags so files can be modified/deleted
 func unlockFiles() {
-    let paths = [
-        "/Applications/FocusGuard.app",
-        "/usr/local/bin/focusguard-daemon",
-        "/Library/LaunchDaemons/com.focusguard.blocker.plist",
-        "/etc/focusguard",
-    ]
-    for path in paths {
-        runShell("chflags -R noschg '\(path)' 2>/dev/null")
-    }
-    log("Files unlocked (mutable)")
+    runShell("chflags -R noschg /Applications/FocusGuard.app 2>/dev/null")
 }
 
 // MARK: - Chrome DoH Policy
@@ -310,27 +278,14 @@ func enforceChromePolicy() {
     let prefsDir = FocusGuardConfig.chromePrefsDir
     let plistName = FocusGuardConfig.chromePlistName
 
-    // Ensure directory exists
     runShell("mkdir -p '\(prefsDir)'")
-
-    // Disable DNS-over-HTTPS so /etc/hosts blocks take effect in Chrome
     runShell("defaults write '\(prefsDir)/\(plistName)' DnsOverHttpsMode -string 'off'")
     log("Chrome DoH policy set to off")
 }
 
 // MARK: - Blocked Domains File Management
 
-func unlockConfigDir() {
-    runShell("chflags -R noschg '\(configDir)' 2>/dev/null")
-}
-
-func relockConfigDir() {
-    runShell("chflags -R schg '\(configDir)' 2>/dev/null")
-}
-
 func addDomain(_ domain: String) {
-    unlockConfigDir()
-    defer { relockConfigDir() }
     let existing = readBlockedDomains()
     let cleaned = domain.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     guard !cleaned.isEmpty else { return }
@@ -344,7 +299,7 @@ func addDomain(_ domain: String) {
         var contents = (try? String(contentsOfFile: blockedFile, encoding: .utf8)) ?? ""
         if !contents.hasSuffix("\n") { contents += "\n" }
         contents += cleaned + "\n"
-        try contents.write(toFile: blockedFile, atomically: true, encoding: .utf8)
+        try contents.write(toFile: blockedFile, atomically: false, encoding: .utf8)
         log("Added domain: \(cleaned)")
     } catch {
         log("Failed to add domain: \(error)")
@@ -352,8 +307,6 @@ func addDomain(_ domain: String) {
 }
 
 func removeDomain(_ domain: String) {
-    unlockConfigDir()
-    defer { relockConfigDir() }
     let cleaned = domain.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     guard !cleaned.isEmpty else { return }
 
@@ -364,7 +317,7 @@ func removeDomain(_ domain: String) {
             let trimmed = line.trimmingCharacters(in: .whitespaces).lowercased()
             return trimmed != cleaned
         }
-        try filtered.joined(separator: "\n").write(toFile: blockedFile, atomically: true, encoding: .utf8)
+        try filtered.joined(separator: "\n").write(toFile: blockedFile, atomically: false, encoding: .utf8)
         log("Removed domain: \(cleaned)")
     } catch {
         log("Failed to remove domain: \(error)")
@@ -381,7 +334,6 @@ func enforce() {
     let now = Date()
     let todayCount = unlocksToday()
 
-    // Calculate the escalated delay for the current unlock attempt
     let effectiveDelay = currentUnlockDelay(baseDelay: config.unlockDelay)
 
     var currentStatus: BlockerStatus = .locked
@@ -391,7 +343,6 @@ func enforce() {
     // Check cooldown: if we're in an unlocked window, check if it expired
     if let endTime = cooldownEnd {
         if now >= endTime {
-            // Cooldown expired -- auto-relock
             log("Cooldown expired, auto-relocking")
             deleteUnlockFile()
             deleteCooldownFile()
@@ -399,16 +350,12 @@ func enforce() {
             currentStatus = .locked
             shouldBlock = true
         } else {
-            // Still in cooldown window (unlocked)
             currentStatus = .unlocked
             shouldBlock = false
-            let remaining = Int(endTime.timeIntervalSince(now))
-            log("Unlocked - auto-relock in \(remaining)s")
         }
     } else if let requestTime = unlockTime {
         let elapsed = now.timeIntervalSince(requestTime)
         if elapsed >= Double(effectiveDelay) {
-            // Unlock delay passed -- enter cooldown window
             currentStatus = .unlocked
             shouldBlock = false
             let cooldownEndTime = now.addingTimeInterval(Double(config.cooldownDuration))
@@ -417,18 +364,13 @@ func enforce() {
             recordUnlock()
             log("Unlock delay elapsed - entering \(config.cooldownDuration)s cooldown window")
         } else {
-            // Still waiting for unlock delay
             currentStatus = .unlockPending
             shouldBlock = true
-            let remaining = effectiveDelay - Int(elapsed)
-            log("Unlock pending - \(remaining)s remaining (escalated delay: \(effectiveDelay)s)")
         }
     }
 
     if shouldBlock {
-        if domains.isEmpty {
-            log("No domains to block")
-        } else {
+        if !domains.isEmpty {
             writeBlocks(domains: domains)
             flushDNS()
         }
@@ -489,7 +431,6 @@ func processCommand() {
         let todayCount = unlocksToday()
         if todayCount >= config.maxUnlocksPerDay {
             log("Unlock DENIED - daily budget exhausted (\(todayCount)/\(config.maxUnlocksPerDay))")
-            // Don't create unlock file -- budget is spent
         } else {
             writeUnlockFile()
             log("Unlock requested (\(todayCount + 1)/\(config.maxUnlocksPerDay) today)")
@@ -500,16 +441,12 @@ func processCommand() {
         if let domain = message.argument {
             addDomain(domain)
             enforce()
-        } else {
-            log("addDomain command missing argument")
         }
 
     case .removeDomain:
         if let domain = message.argument {
             removeDomain(domain)
             enforce()
-        } else {
-            log("removeDomain command missing argument")
         }
 
     case .refresh:
@@ -519,16 +456,23 @@ func processCommand() {
 
 // MARK: - Main
 
-log("FocusGuard daemon starting")
+// Log immediately so we know the daemon started
+log("FocusGuard daemon v2 starting (PID: \(ProcessInfo.processInfo.processIdentifier))")
 
 // Ensure config directory exists
-runShell("mkdir -p '\(configDir)'")
+do {
+    try FileManager.default.createDirectory(atPath: configDir, withIntermediateDirectories: true)
+} catch {
+    log("Warning: Could not create config dir: \(error)")
+}
 
 // Enforce Chrome DoH policy on startup
 enforceChromePolicy()
 
-// Run initial enforcement immediately
+// Run initial enforcement
+log("Running initial enforcement...")
 enforce()
+log("Initial enforcement complete")
 
 // Timer 1: Enforce blocks every 30 seconds
 let enforceTimer = Timer(timeInterval: 30.0, repeats: true) { _ in
