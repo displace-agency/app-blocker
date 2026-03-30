@@ -1,0 +1,10 @@
+name = "focusguard-dns"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+
+[[kv_namespaces]]
+binding = "BLOCKLIST"
+id = "" # Set after running: wrangler kv namespace create FOCUSGUARD_BLOCKLIST
+
+[vars]
+UPSTREAM_DOH = "https://cloudflare-dns.com/dns-query"

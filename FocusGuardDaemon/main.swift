@@ -26,6 +26,8 @@ struct DaemonConfig {
     var unlockDelay: Int
     var maxUnlocksPerDay: Int
     var cooldownDuration: Int
+    var workerUrl: String?
+    var workerApiKey: String?
 }
 
 func readConfig() -> DaemonConfig {
@@ -40,7 +42,9 @@ func readConfig() -> DaemonConfig {
     return DaemonConfig(
         unlockDelay: json["unlockDelay"] as? Int ?? FocusGuardConfig.defaultUnlockDelay,
         maxUnlocksPerDay: json["maxUnlocksPerDay"] as? Int ?? FocusGuardConfig.defaultMaxUnlocksPerDay,
-        cooldownDuration: json["cooldownDuration"] as? Int ?? FocusGuardConfig.defaultCooldownDuration
+        cooldownDuration: json["cooldownDuration"] as? Int ?? FocusGuardConfig.defaultCooldownDuration,
+        workerUrl: json["workerUrl"] as? String,
+        workerApiKey: json["workerApiKey"] as? String
     )
 }
 
@@ -283,6 +287,56 @@ func enforceChromePolicy() {
     log("Chrome DoH policy set to off")
 }
 
+// MARK: - Cloud Sync
+
+private var lastSyncHash = ""
+
+func syncToCloud(domains: [String], locked: Bool, cooldownEnd: Date?) {
+    let config = readConfig()
+    guard let urlStr = config.workerUrl, let apiKey = config.workerApiKey,
+          let url = URL(string: "\(urlStr)/api/sync") else {
+        return // Cloud sync not configured
+    }
+
+    // Only sync when state changes
+    let cooldownMs = cooldownEnd.map { Int($0.timeIntervalSince1970 * 1000) }
+    let hash = "\(domains.sorted().joined())-\(locked)-\(cooldownMs ?? 0)"
+    guard hash != lastSyncHash else { return }
+    lastSyncHash = hash
+
+    // Build request body
+    var body: [String: Any] = [
+        "domains": domains,
+        "locked": locked,
+    ]
+    if let ms = cooldownMs {
+        body["cooldownEnd"] = ms
+    }
+
+    guard let jsonData = try? JSONSerialization.data(withJSONObject: body) else { return }
+
+    // Fire-and-forget async request
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.httpBody = jsonData
+
+    URLSession.shared.dataTask(with: request) { _, response, error in
+        if let error = error {
+            log("Cloud sync failed: \(error.localizedDescription)")
+            lastSyncHash = "" // Retry next cycle
+            return
+        }
+        if let http = response as? HTTPURLResponse, http.statusCode == 200 {
+            log("Cloud sync OK")
+        } else {
+            log("Cloud sync error: \(String(describing: response))")
+            lastSyncHash = ""
+        }
+    }.resume()
+}
+
 // MARK: - Blocked Domains File Management
 
 func isValidDomain(_ domain: String) -> Bool {
@@ -414,6 +468,9 @@ func enforce() {
         cooldownDuration: config.cooldownDuration
     )
     writeStatus(status)
+
+    // Sync to cloud (fire-and-forget, skips if not configured)
+    syncToCloud(domains: domains, locked: shouldBlock, cooldownEnd: activeCooldownEnd)
 }
 
 // MARK: - Command Processing

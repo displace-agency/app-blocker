@@ -6,6 +6,7 @@ struct StatusView: View {
     @State private var newDomain = ""
     @State private var showUnlockConfirmation = false
     @State private var showGroups = false
+    @State private var showiPhoneSetup = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -401,12 +402,42 @@ struct StatusView: View {
     // MARK: - Footer
 
     private var footerSection: some View {
-        HStack {
-            Circle()
-                .fill(daemon.isConnected ? Color.green : Color.red)
-                .frame(width: 6, height: 6)
-            Text(daemon.isConnected ? "Daemon active" : "Daemon offline")
-                .font(.caption2)
+        VStack(spacing: 6) {
+            // iPhone setup row
+            HStack {
+                Button {
+                    showiPhoneSetup = true
+                } label: {
+                    Label("iPhone", systemImage: "iphone")
+                        .font(.caption2)
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(.accentColor)
+
+                Spacer()
+
+                if daemon.status == .unlocked, let password = readProfilePassword() {
+                    Button {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(password, forType: .string)
+                    } label: {
+                        Label("Copy Profile Password", systemImage: "key")
+                            .font(.caption2)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundColor(.orange)
+                }
+            }
+            .padding(.horizontal)
+
+            Divider()
+
+            HStack {
+                Circle()
+                    .fill(daemon.isConnected ? Color.green : Color.red)
+                    .frame(width: 6, height: 6)
+                Text(daemon.isConnected ? "Daemon active" : "Daemon offline")
+                    .font(.caption2)
                 .foregroundColor(.secondary)
 
             Spacer()
@@ -420,5 +451,16 @@ struct StatusView: View {
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
+        } // end VStack
+        .alert("Set Up iPhone", isPresented: $showiPhoneSetup) {
+            Button("OK") {}
+        } message: {
+            Text("Run this in Terminal:\n\nsudo python3 ~/websites/app-blocker/Scripts/generate-profile.py --worker-url YOUR_WORKER_URL\n\nThen AirDrop the file to your iPhone.")
+        }
+    }
+
+    private func readProfilePassword() -> String? {
+        try? String(contentsOfFile: "/etc/focusguard/.ios_profile_password", encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
