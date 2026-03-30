@@ -126,6 +126,12 @@ final class DaemonClient: ObservableObject {
         sendCommand(CommandMessage(command: .addDomain, argument: cleaned))
     }
 
+    func addDomains(_ domains: [String]) {
+        let cleaned = domains.map { cleanDomain($0) }.filter { !$0.isEmpty }
+        guard !cleaned.isEmpty else { return }
+        sendCommand(CommandMessage(command: .addDomains, argument: cleaned.joined(separator: "\n")))
+    }
+
     func removeDomain(_ domain: String) {
         sendCommand(CommandMessage(command: .removeDomain, argument: domain))
     }
@@ -149,8 +155,8 @@ final class DaemonClient: ObservableObject {
     // MARK: - Helpers
 
     private func cleanDomain(_ input: String) -> String {
-        var domain = input.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Strip protocol
+        var domain = input.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        // Strip protocol (already lowercased)
         for prefix in ["https://", "http://"] {
             if domain.hasPrefix(prefix) {
                 domain = String(domain.dropFirst(prefix.count))
@@ -164,6 +170,6 @@ final class DaemonClient: ObservableObject {
         if let slashIndex = domain.firstIndex(of: "/") {
             domain = String(domain[domain.startIndex..<slashIndex])
         }
-        return domain.lowercased()
+        return domain
     }
 }

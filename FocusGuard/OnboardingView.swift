@@ -315,10 +315,12 @@ struct OnboardingView: View {
     }
 
     private func sendSelectedGroupsToDaemon() {
+        var allDomains: [String] = []
         for group in DomainGroups.all where selectedGroups.contains(group.id) {
-            for domain in group.domains {
-                daemon.addDomain(domain)
-            }
+            allDomains.append(contentsOf: group.domains)
+        }
+        if !allDomains.isEmpty {
+            daemon.addDomains(allDomains)
         }
     }
 }

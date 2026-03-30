@@ -94,6 +94,7 @@ public enum DaemonCommand: String, Codable {
     case lock
     case unlock
     case addDomain
+    case addDomains // batch: argument is newline-separated domain list
     case removeDomain
     case refresh
 }

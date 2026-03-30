@@ -16,7 +16,7 @@ struct FocusGuardApp {
     }
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSWindowDelegate {
     private var statusItem: NSStatusItem!
     private var popover: NSPopover!
     private let daemon = DaemonClient()
@@ -75,9 +75,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         window.level = .floating
         window.title = "FocusGuard"
 
+        window.delegate = self
         self.onboardingWindow = window
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    // Handle user closing onboarding via X button
+    func windowWillClose(_ notification: Notification) {
+        if (notification.object as? NSWindow) === onboardingWindow {
+            UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
+            onboardingWindow = nil
+        }
     }
 
     private func dismissOnboarding() {

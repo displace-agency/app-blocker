@@ -15,9 +15,10 @@ let markerEnd = FocusGuardConfig.lockMarkerEnd
 
 // MARK: - Helpers
 
+private let isoFormatter = ISO8601DateFormatter()
+
 func log(_ message: String) {
-    let timestamp = ISO8601DateFormatter().string(from: Date())
-    let line = "[\(timestamp)] \(message)\n"
+    let line = "[\(isoFormatter.string(from: Date()))] \(message)\n"
     FileHandle.standardError.write(Data(line.utf8))
 }
 
@@ -96,8 +97,8 @@ func recordUnlock() {
 
 /// Escalating delay: base delay * 2^(unlocks_today)
 func currentUnlockDelay(baseDelay: Int) -> Int {
-    let count = unlocksToday()
-    let multiplier = 1 << count // 2^count: 1x, 2x, 4x, 8x...
+    let count = min(unlocksToday(), 6) // cap at 2^6 = 64x to prevent overflow
+    let multiplier = 1 << count
     return baseDelay * multiplier
 }
 
@@ -195,28 +196,27 @@ func readHostsWithoutBlock() -> String {
     return result.joined(separator: "\n")
 }
 
+/// Write to /etc/hosts safely via temp file to prevent corruption on mid-write kill
+func writeHostsSafe(_ content: String) {
+    let tmp = "/tmp/focusguard-hosts-\(ProcessInfo.processInfo.processIdentifier)"
+    do {
+        try content.write(toFile: tmp, atomically: true, encoding: .utf8)
+        runShell("cp '\(tmp)' '\(hostsFile)'")
+        try? FileManager.default.removeItem(atPath: tmp)
+    } catch {
+        log("Failed to write hosts: \(error)")
+    }
+}
+
 func writeBlocks(domains: [String]) {
     let clean = readHostsWithoutBlock()
     let block = buildBlockEntries(for: domains)
-    let content = clean + "\n\n" + block + "\n"
-
-    // Write directly (not atomically) to avoid temp file issues with protected dirs
-    do {
-        try content.write(toFile: hostsFile, atomically: false, encoding: .utf8)
-    } catch {
-        log("Failed to write \(hostsFile): \(error)")
-    }
+    writeHostsSafe(clean + "\n\n" + block + "\n")
 }
 
 func removeBlocks() {
     let clean = readHostsWithoutBlock()
-    let content = clean + "\n"
-
-    do {
-        try content.write(toFile: hostsFile, atomically: false, encoding: .utf8)
-    } catch {
-        log("Failed to write \(hostsFile): \(error)")
-    }
+    writeHostsSafe(clean + "\n")
 }
 
 // MARK: - Unlock File
@@ -285,10 +285,22 @@ func enforceChromePolicy() {
 
 // MARK: - Blocked Domains File Management
 
+func isValidDomain(_ domain: String) -> Bool {
+    let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: ".-"))
+    return !domain.isEmpty
+        && domain.unicodeScalars.allSatisfy { allowed.contains($0) }
+        && domain.contains(".")
+        && !domain.hasPrefix(".")
+        && !domain.hasSuffix(".")
+}
+
 func addDomain(_ domain: String) {
     let existing = readBlockedDomains()
     let cleaned = domain.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    guard !cleaned.isEmpty else { return }
+    guard isValidDomain(cleaned) else {
+        log("Invalid domain rejected: \(cleaned)")
+        return
+    }
 
     if existing.contains(where: { $0.lowercased() == cleaned }) {
         log("Domain \(cleaned) already in blocklist")
@@ -369,16 +381,24 @@ func enforce() {
         }
     }
 
+    // Only write /etc/hosts if content actually changed (avoids 30s DNS blips)
+    let currentHosts = (try? String(contentsOfFile: hostsFile, encoding: .utf8)) ?? ""
+
     if shouldBlock {
         if !domains.isEmpty {
-            writeBlocks(domains: domains)
-            flushDNS()
+            let expected = readHostsWithoutBlock() + "\n\n" + buildBlockEntries(for: domains) + "\n"
+            if currentHosts != expected {
+                writeBlocks(domains: domains)
+                flushDNS()
+            }
         }
         lockFiles()
     } else {
         unlockFiles()
-        removeBlocks()
-        flushDNS()
+        if currentHosts.contains(markerStart) {
+            removeBlocks()
+            flushDNS()
+        }
     }
 
     // Write status
@@ -440,6 +460,15 @@ func processCommand() {
     case .addDomain:
         if let domain = message.argument {
             addDomain(domain)
+            enforce()
+        }
+
+    case .addDomains:
+        if let domains = message.argument {
+            for domain in domains.components(separatedBy: "\n") {
+                let trimmed = domain.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty { addDomain(trimmed) }
+            }
             enforce()
         }
 
