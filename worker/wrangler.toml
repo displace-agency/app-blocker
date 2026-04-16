@@ -4,7 +4,12 @@ compatibility_date = "2024-12-01"
 
 [[kv_namespaces]]
 binding = "BLOCKLIST"
-id = "" # Set after running: wrangler kv namespace create FOCUSGUARD_BLOCKLIST
+id = "ee41cb9716bb4c47aa237e942ce0cf35"
 
 [vars]
 UPSTREAM_DOH = "https://cloudflare-dns.com/dns-query"
+
+# API_KEY is injected as a Cloudflare Worker secret, not a plaintext var.
+# Set it once per environment:
+#   wrangler secret put API_KEY
+# For local dev, put it in worker/.dev.vars (gitignored). Template: .dev.vars.example

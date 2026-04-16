@@ -1,8 +1,14 @@
 import SwiftUI
 import AppKit
+import UserNotifications
 import FocusGuardShared
 
 // Use AppKit NSStatusBar directly -- much more reliable than SwiftUI MenuBarExtra for SPM builds
+
+extension Notification.Name {
+    static let focusGuardShowUnlock = Notification.Name("focusGuardShowUnlock")
+    static let focusGuardShowiPhoneSetup = Notification.Name("focusGuardShowiPhoneSetup")
+}
 
 @main
 struct FocusGuardApp {
@@ -21,8 +27,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
     private var popover: NSPopover!
     private let daemon = DaemonClient()
     private var onboardingWindow: NSWindow?
+    private var unlockWindow: NSWindow?
+    private var iphoneSetupWindow: NSWindow?
+    private var lastStatus: BlockerStatus?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        requestNotificationPermission()
+
         // Create the status bar item
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
 
@@ -36,19 +47,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
 
         // Create the popover
         popover = NSPopover()
-        popover.contentSize = NSSize(width: 300, height: 420)
+        popover.contentSize = NSSize(width: 320, height: 420)
         popover.behavior = .transient
         popover.delegate = self
         popover.contentViewController = NSHostingController(
             rootView: StatusView(daemon: daemon)
         )
 
-        // Listen for status changes to update the icon
+        // Listen for status changes to update the icon + post a notification
+        // when the 20-minute wait ends and blocks actually lift.
         daemon.onStatusChange = { [weak self] status in
             DispatchQueue.main.async {
-                self?.updateIcon(for: status)
+                guard let self else { return }
+                let previous = self.lastStatus
+                self.lastStatus = status
+                self.updateIcon(for: status)
+                if previous == .unlockPending && status == .unlocked {
+                    self.postUnlockReadyNotification()
+                }
             }
         }
+
+        // Listen for window requests from StatusView
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(showUnlockWindow),
+            name: .focusGuardShowUnlock, object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(showIPhoneSetupWindow),
+            name: .focusGuardShowiPhoneSetup, object: nil
+        )
 
         // Show onboarding on first launch
         let hasCompleted = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
@@ -81,11 +109,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    // Handle user closing onboarding via X button
+    // Handle user closing windows via X button
     func windowWillClose(_ notification: Notification) {
-        if (notification.object as? NSWindow) === onboardingWindow {
+        guard let window = notification.object as? NSWindow else { return }
+        if window === onboardingWindow {
             UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
             onboardingWindow = nil
+        } else if window === unlockWindow {
+            unlockWindow = nil
+        } else if window === iphoneSetupWindow {
+            iphoneSetupWindow = nil
         }
     }
 
@@ -105,6 +138,72 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         }
     }
 
+    // MARK: - Standalone Windows (fixes popover auto-dismiss)
+
+    @objc private func showUnlockWindow() {
+        // Close popover so it can resume .transient behavior
+        popover.performClose(nil)
+
+        // Close existing if any
+        unlockWindow?.close()
+
+        let view = UnlockConfirmationView(
+            delayMinutes: daemon.unlockDelay / 60,
+            onConfirm: { [weak self] in
+                self?.daemon.requestUnlock()
+            },
+            onDismiss: { [weak self] in
+                self?.unlockWindow?.close()
+                self?.unlockWindow = nil
+            }
+        )
+
+        let controller = NSHostingController(rootView: view)
+        let window = NSWindow(contentViewController: controller)
+        window.styleMask = [.titled, .closable]
+        window.title = "FocusGuard"
+        window.titlebarAppearsTransparent = true
+        window.center()
+        window.isReleasedWhenClosed = false
+        window.level = .floating
+        window.delegate = self
+
+        unlockWindow = window
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    @objc private func showIPhoneSetupWindow() {
+        // Close popover so it can resume .transient behavior
+        popover.performClose(nil)
+
+        // Close existing if any
+        iphoneSetupWindow?.close()
+
+        let view = iPhoneSetupView(
+            daemon: daemon,
+            onDismiss: { [weak self] in
+                self?.iphoneSetupWindow?.close()
+                self?.iphoneSetupWindow = nil
+            }
+        )
+
+        let controller = NSHostingController(rootView: view)
+        let window = NSWindow(contentViewController: controller)
+        window.setContentSize(NSSize(width: 360, height: 440))
+        window.styleMask = [.titled, .closable]
+        window.title = "FocusGuard"
+        window.titlebarAppearsTransparent = true
+        window.center()
+        window.isReleasedWhenClosed = false
+        window.level = .floating
+        window.delegate = self
+
+        iphoneSetupWindow = window
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
     private func updateIcon(for status: BlockerStatus) {
         let symbolName: String
         switch status {
@@ -121,5 +220,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         )
         image?.isTemplate = true
         statusItem.button?.image = image
+    }
+
+    // MARK: - Notifications
+
+    private func requestNotificationPermission() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+    }
+
+    private func postUnlockReadyNotification() {
+        let content = UNMutableNotificationContent()
+        content.title = "FocusGuard"
+        content.body = "Blocks are lifted. You have 15 minutes before auto-relock."
+        content.sound = .default
+        let request = UNNotificationRequest(
+            identifier: "focusguard.unlock.ready",
+            content: content,
+            trigger: nil
+        )
+        UNUserNotificationCenter.current().add(request)
     }
 }

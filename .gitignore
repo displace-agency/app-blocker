@@ -1,6 +1,8 @@
 # Build artifacts
 .build/
 build/
+.next/
+dist/
 
 # macOS
 .DS_Store
@@ -10,3 +12,15 @@ build/
 
 # Swift Package Manager
 .swiftpm/
+
+# Node
+node_modules/
+
+# Secrets
+.env
+.env.local
+.env.*.local
+.dev.vars
+
+# Embedded app (separate git repo — managed independently)
+website/

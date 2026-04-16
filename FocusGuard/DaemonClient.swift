@@ -136,6 +136,11 @@ final class DaemonClient: ObservableObject {
         sendCommand(CommandMessage(command: .removeDomain, argument: domain))
     }
 
+    func removeDomains(_ domains: [String]) {
+        guard !domains.isEmpty else { return }
+        sendCommand(CommandMessage(command: .removeDomains, argument: domains.joined(separator: "\n")))
+    }
+
     private func sendCommand(_ message: CommandMessage) {
         do {
             let encoder = JSONEncoder()

@@ -390,6 +390,24 @@ func removeDomain(_ domain: String) {
     }
 }
 
+func removeDomainsBatch(_ domains: [String]) {
+    let toRemove = Set(domains.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() })
+    guard !toRemove.isEmpty else { return }
+
+    do {
+        let contents = try String(contentsOfFile: blockedFile, encoding: .utf8)
+        let lines = contents.components(separatedBy: .newlines)
+        let filtered = lines.filter { line in
+            let trimmed = line.trimmingCharacters(in: .whitespaces).lowercased()
+            return trimmed.isEmpty || trimmed.hasPrefix("#") || !toRemove.contains(trimmed)
+        }
+        try filtered.joined(separator: "\n").write(toFile: blockedFile, atomically: false, encoding: .utf8)
+        log("Batch removed \(toRemove.count) domains")
+    } catch {
+        log("Failed to batch remove domains: \(error)")
+    }
+}
+
 // MARK: - Core Enforcement
 
 func enforce() {
@@ -532,6 +550,15 @@ func processCommand() {
     case .removeDomain:
         if let domain = message.argument {
             removeDomain(domain)
+            enforce()
+        }
+
+    case .removeDomains:
+        if let domains = message.argument {
+            let domainList = domains.components(separatedBy: "\n")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            removeDomainsBatch(domainList)
             enforce()
         }
 

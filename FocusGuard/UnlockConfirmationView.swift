@@ -1,9 +1,9 @@
 import SwiftUI
 
 struct UnlockConfirmationView: View {
-    @Binding var isPresented: Bool
     var delayMinutes: Int
     var onConfirm: () -> Void
+    var onDismiss: () -> Void
 
     @State private var confirmText = ""
 
@@ -39,14 +39,14 @@ struct UnlockConfirmationView: View {
             HStack(spacing: 12) {
                 Button("Cancel") {
                     confirmText = ""
-                    isPresented = false
+                    onDismiss()
                 }
                 .keyboardShortcut(.cancelAction)
 
                 Button("Confirm Unlock") {
                     onConfirm()
                     confirmText = ""
-                    isPresented = false
+                    onDismiss()
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.orange)
