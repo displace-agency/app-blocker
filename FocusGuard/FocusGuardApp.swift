@@ -38,9 +38,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
 
         if let button = statusItem.button {
-            let image = NSImage(systemSymbolName: "shield.checkered", accessibilityDescription: "FocusGuard")
-            image?.isTemplate = true
-            button.image = image
+            // Pre-render the SF Symbol into a non-template bitmap. Works around
+            // a macOS 26 regression where NSStatusBarButton draws template
+            // images at zero alpha for ad-hoc-signed apps, making the icon
+            // invisible while still clickable.
+            button.image = Self.renderBarIcon(symbol: "shield.checkered", color: .white)
             button.action = #selector(togglePopover)
             button.target = self
         }
@@ -206,20 +208,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
 
     private func updateIcon(for status: BlockerStatus) {
         let symbolName: String
+        let color: NSColor
         switch status {
         case .locked:
             symbolName = "shield.checkered"
+            color = .white
         case .unlockPending:
             symbolName = "shield.badge.exclamationmark"
+            color = .systemOrange
         case .unlocked:
             symbolName = "shield.slash"
+            color = .systemRed
         }
-        let image = NSImage(
-            systemSymbolName: symbolName,
-            accessibilityDescription: "FocusGuard - \(status.rawValue)"
-        )
-        image?.isTemplate = true
-        statusItem.button?.image = image
+        statusItem.button?.image = Self.renderBarIcon(symbol: symbolName, color: color)
+    }
+
+    /// Pre-renders an SF Symbol into a non-template bitmap NSImage tinted with
+    /// the given color. Fixes the macOS 26 regression where NSStatusBarButton
+    /// draws template images at zero alpha for ad-hoc-signed apps.
+    private static func renderBarIcon(symbol: String, color: NSColor) -> NSImage {
+        let config = NSImage.SymbolConfiguration(pointSize: 15, weight: .medium)
+        let source = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?
+            .withSymbolConfiguration(config)
+            ?? NSImage(size: NSSize(width: 18, height: 18))
+        let size = source.size
+        let image = NSImage(size: size)
+        image.lockFocus()
+        color.set()
+        let rect = NSRect(origin: .zero, size: size)
+        source.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1.0)
+        rect.fill(using: .sourceIn)
+        image.unlockFocus()
+        image.isTemplate = false
+        return image
     }
 
     // MARK: - Notifications
