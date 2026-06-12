@@ -99,6 +99,11 @@ struct OnboardingView: View {
                     title: "Auto-Relock",
                     description: "15-minute window, then blocks re-engage automatically"
                 )
+                featureRow(
+                    icon: "hourglass",
+                    title: "Sessions & Schedules",
+                    description: "Start an uncancellable focus session, or block on a weekly routine"
+                )
             }
             .padding(.horizontal, 16)
 

@@ -150,16 +150,19 @@ struct QRProfileView: View {
             Text("Scan with iPhone Camera")
                 .font(.title3).fontWeight(.bold)
 
-            // QR Code image from API
-            AsyncImage(url: URL(string: "https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=\(profileURL.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? profileURL)")) { image in
-                image
+            // QR code generated locally via CoreImage — instant, offline.
+            if let qr = QRCodeGenerator.image(for: profileURL, size: 180) {
+                Image(nsImage: qr)
                     .resizable()
                     .interpolation(.none)
                     .frame(width: 180, height: 180)
                     .cornerRadius(12)
-            } placeholder: {
-                ProgressView()
+                    .accessibilityLabel("QR code to install the DNS blocker profile")
+            } else {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color(white: 0.15))
                     .frame(width: 180, height: 180)
+                    .overlay(Image(systemName: "qrcode").font(.largeTitle).foregroundColor(.secondary))
             }
 
             VStack(spacing: 6) {

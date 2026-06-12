@@ -46,13 +46,21 @@ chmod 755 /usr/local/bin/focusguard-daemon
 rm -rf /Applications/FocusGuard.app
 cp -R "$BUILD_DIR/FocusGuard.app" /Applications/
 
-# Step 5: Ensure config exists
+# Step 5: Ensure config + data files exist (daemon migrates config fields itself)
 mkdir -p /etc/focusguard
 if [ ! -f /etc/focusguard/blocked.txt ]; then
     cp "$BUILD_DIR/daemon/default-blocked.txt" /etc/focusguard/blocked.txt
 fi
+if [ ! -f /etc/focusguard/appBlocked.txt ]; then
+    : > /etc/focusguard/appBlocked.txt
+fi
 if [ ! -f /etc/focusguard/config.json ]; then
-    echo '{"unlockDelay":1200,"maxUnlocksPerDay":2,"cooldownDuration":900}' > /etc/focusguard/config.json
+    echo '{"version":2,"unlockDelay":1200,"maxUnlocksPerDay":2,"cooldownDuration":900,"appCheckInterval":10,"schedules":[]}' > /etc/focusguard/config.json
+fi
+
+# Trim an oversized legacy log so it does not linger forever
+if [ -f /var/log/focusguard.log ] && [ "\$(stat -f%z /var/log/focusguard.log 2>/dev/null || echo 0)" -gt 5242880 ]; then
+    : > /var/log/focusguard.log
 fi
 
 # Step 6: Install plist
@@ -64,23 +72,28 @@ chmod 644 /Library/LaunchDaemons/com.focusguard.blocker.plist
 mkdir -p "/Library/Managed Preferences"
 defaults write "/Library/Managed Preferences/com.google.Chrome" DnsOverHttpsMode -string "off"
 
-# Step 8: Start daemon
-launchctl bootstrap system /Library/LaunchDaemons/com.focusguard.blocker.plist 2>/dev/null || \
-    launchctl load /Library/LaunchDaemons/com.focusguard.blocker.plist 2>/dev/null || true
+# Step 8: Start daemon via launchd (no unmanaged direct-launch fallback -- a
+# detached process would fight launchd's KeepAlive).
+launchctl bootout system/com.focusguard.blocker 2>/dev/null || true
+BOOTSTRAP_OUT="\$(launchctl bootstrap system /Library/LaunchDaemons/com.focusguard.blocker.plist 2>&1)"
+if [ -n "\$BOOTSTRAP_OUT" ]; then
+    echo "launchctl bootstrap: \$BOOTSTRAP_OUT"
+fi
 
-# Verify daemon started
-sleep 2
-if pgrep -q focusguard-daemon; then
-    echo "Daemon started successfully"
-else
-    # Fallback: run directly
-    /usr/local/bin/focusguard-daemon &
-    sleep 1
-    if pgrep -q focusguard-daemon; then
-        echo "Daemon started (direct launch)"
-    else
-        echo "WARNING: Daemon failed to start"
+# Verify the daemon is actually running under launchd (retry up to 10s)
+RUNNING=0
+for i in 1 2 3 4 5 6 7 8 9 10; do
+    if launchctl print system/com.focusguard.blocker 2>/dev/null | grep -q "state = running"; then
+        RUNNING=1
+        break
     fi
+    sleep 1
+done
+if [ "\$RUNNING" -eq 1 ]; then
+    echo "Daemon is running."
+else
+    echo "ERROR: Daemon failed to reach running state. Check /var/log/focusguard.launchd.log"
+    exit 1
 fi
 ENDSCRIPT
 

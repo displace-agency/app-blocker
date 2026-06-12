@@ -38,9 +38,15 @@ else
     echo "  Keeping existing blocklist"
 fi
 
-# Create default config (preserve existing)
+# Create empty app blocklist (preserve existing)
+if [ ! -f /etc/focusguard/appBlocked.txt ]; then
+    : > /etc/focusguard/appBlocked.txt
+    echo "  Created empty app blocklist"
+fi
+
+# Create default config (preserve existing; daemon migrates fields on startup)
 if [ ! -f /etc/focusguard/config.json ]; then
-    echo '{"unlockDelay": 1200, "maxUnlocksPerDay": 2, "cooldownDuration": 900}' > /etc/focusguard/config.json
+    echo '{"version":2,"unlockDelay":1200,"maxUnlocksPerDay":2,"cooldownDuration":900,"appCheckInterval":10,"schedules":[]}' > /etc/focusguard/config.json
     echo "  Created default config (20-minute unlock delay)"
 else
     echo "  Keeping existing config"
@@ -54,9 +60,24 @@ cp "$BUILD_DIR/daemon/com.focusguard.blocker.plist" /Library/LaunchDaemons/
 chown root:wheel /Library/LaunchDaemons/com.focusguard.blocker.plist
 chmod 644 /Library/LaunchDaemons/com.focusguard.blocker.plist
 
-# Load daemon
-launchctl bootstrap system /Library/LaunchDaemons/com.focusguard.blocker.plist
-echo "  Daemon installed and running"
+# Load daemon and verify it reaches running state
+BOOTSTRAP_OUT="$(launchctl bootstrap system /Library/LaunchDaemons/com.focusguard.blocker.plist 2>&1)"
+if [ -n "$BOOTSTRAP_OUT" ]; then
+    echo "  launchctl bootstrap: $BOOTSTRAP_OUT"
+fi
+RUNNING=0
+for i in 1 2 3 4 5 6 7 8 9 10; do
+    if launchctl print system/com.focusguard.blocker 2>/dev/null | grep -q "state = running"; then
+        RUNNING=1; break
+    fi
+    sleep 1
+done
+if [ "$RUNNING" -eq 1 ]; then
+    echo "  Daemon installed and running"
+else
+    echo "  ERROR: Daemon failed to start. Check /var/log/focusguard.launchd.log"
+    exit 1
+fi
 
 echo ""
 echo "Installing Chrome policy (disable Secure DNS)..."

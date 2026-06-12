@@ -11,8 +11,8 @@
     <key>KeepAlive</key>
     <true/>
     <key>StandardErrorPath</key>
-    <string>/var/log/focusguard.log</string>
+    <string>/var/log/focusguard.launchd.log</string>
     <key>StandardOutPath</key>
-    <string>/var/log/focusguard.log</string>
+    <string>/var/log/focusguard.launchd.log</string>
 </dict>
 </plist>
