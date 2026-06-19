@@ -1,12 +1,15 @@
 #!/bin/bash
 #
 # Generate the LOCAL browser policy profile with URLBlocklist populated from
-# ExtraBlocklist.swift.
+# ExtraBlocklist.swift PLUS the user blocklist (/etc/focusguard/blocked.txt).
 #
 # URLBlocklist is enforced by the browser at the navigation layer (before the request
 # leaves), so it blocks the listed domains in ALL Brave windows -- including "New
 # private window with Tor", where /etc/hosts is bypassed. This keeps Brave's Tor
-# feature usable while still blocking the always-on list inside it.
+# feature usable while still blocking the full FocusGuard blocklist inside it.
+#
+# Re-run this and reinstall the profile whenever you change your blocklist (normal
+# windows update live via /etc/hosts; Tor coverage only refreshes on regenerate).
 #
 # The committed Resources/FocusGuard-Browser-Policy.mobileconfig keeps URLBlocklist
 # EMPTY (public template). The file generated below is gitignored and never pushed.
@@ -19,13 +22,19 @@ set -euo pipefail
 
 DIR="$(cd "$(dirname "$0")/.." && pwd)"
 SRC="$DIR/FocusGuardShared/ExtraBlocklist.swift"
+USERLIST="/etc/focusguard/blocked.txt"
 OUT="$DIR/Resources/FocusGuard-Browser-Policy.local.mobileconfig"
 
-domains="$(grep -oE '"[a-z0-9][a-z0-9.-]*\.[a-z]{2,}"' "$SRC" | tr -d '"' | sort -u || true)"
+# Always-on extra list (compiled-in, local-only) ...
+extra="$(grep -oE '"[a-z0-9][a-z0-9.-]*\.[a-z]{2,}"' "$SRC" | tr -d '"' || true)"
+# ... plus the user blocklist the daemon enforces in /etc/hosts (YouTube, X, etc.), so
+# the same sites are blocked inside Brave Tor windows too.
+user="$(grep -vE '^[[:space:]]*(#|$)' "$USERLIST" 2>/dev/null | sed 's/[[:space:]]//g' | tr 'A-Z' 'a-z' || true)"
+domains="$(printf '%s\n%s\n' "$extra" "$user" | grep -E '^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$' | sort -u || true)"
 count="$(printf '%s\n' "$domains" | grep -c . || true)"
 if [ "${count:-0}" -eq 0 ]; then
-  echo "No domains found in $SRC." >&2
-  echo "Expected on a fresh clone (the committed file is empty). Populate it locally first." >&2
+  echo "No domains found (ExtraBlocklist.swift empty and $USERLIST empty/missing)." >&2
+  echo "On a fresh clone, populate ExtraBlocklist.swift locally first." >&2
   exit 1
 fi
 
@@ -48,7 +57,7 @@ cat > "$OUT" <<PROFILE
     <key>PayloadIdentifier</key><string>agency.displace.focusguard.browserpolicy</string>
     <key>PayloadUUID</key><string>05D0DF25-3EAF-4EE2-B33D-FED547B4F4A2</string>
     <key>PayloadDisplayName</key><string>FocusGuard Browser Policy</string>
-    <key>PayloadDescription</key><string>Blocks the always-on list in Brave and Chrome (including Brave Tor windows) and turns off DNS-over-HTTPS.</string>
+    <key>PayloadDescription</key><string>Blocks the FocusGuard blocklist in Brave and Chrome (including Brave Tor windows) and turns off DNS-over-HTTPS.</string>
     <key>PayloadOrganization</key><string>FocusGuard</string>
     <key>PayloadScope</key><string>System</string>
     <key>PayloadEnabled</key><true/>
