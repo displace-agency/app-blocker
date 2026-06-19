@@ -68,9 +68,9 @@ cp "$BUILD_DIR/daemon/com.focusguard.blocker.plist" /Library/LaunchDaemons/
 chown root:wheel /Library/LaunchDaemons/com.focusguard.blocker.plist
 chmod 644 /Library/LaunchDaemons/com.focusguard.blocker.plist
 
-# Step 7: Chrome policy
-mkdir -p "/Library/Managed Preferences"
-defaults write "/Library/Managed Preferences/com.google.Chrome" DnsOverHttpsMode -string "off"
+# Step 7: Browser policy (Brave Tor + Chrome/Brave DoH off) is delivered via the
+# FocusGuard-Browser-Policy.mobileconfig configuration profile, NOT here -- modern
+# macOS ignores defaults writes to /Library/Managed Preferences.
 
 # Step 8: Start daemon via launchd (no unmanaged direct-launch fallback -- a
 # detached process would fight launchd's KeepAlive).

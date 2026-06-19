@@ -30,6 +30,7 @@ final class Daemon {
     private var enforceTimer: DispatchSourceTimer?
     private var appTimer: DispatchSourceTimer?
     private let cachedBootId: String
+    private var browserPolicyLogged = false
 
     init() {
         self.config = ConfigSchema.parse(data: FileManager.default.contents(atPath: FocusGuardConfig.configFile))
@@ -46,7 +47,7 @@ final class Daemon {
         ensureConfigDir()
         unlink(FocusGuardConfig.legacyCommandFile) // retire the old world-writable IPC file
         migrateConfigIfNeeded()
-        enforceChromePolicy()
+        verifyBrowserPolicy(verbose: true)
 
         socketServer = SocketServer(
             path: FocusGuardConfig.socketPath,
@@ -60,7 +61,10 @@ final class Daemon {
 
         let et = DispatchSource.makeTimerSource(queue: stateQueue)
         et.schedule(deadline: .now() + 30, repeating: 30)
-        et.setEventHandler { [weak self] in _ = self?.enforce() }
+        et.setEventHandler { [weak self] in
+            _ = self?.enforce()
+            self?.verifyBrowserPolicy() // verify profile presence, silent
+        }
         et.resume()
         enforceTimer = et
 
@@ -79,8 +83,12 @@ final class Daemon {
     @discardableResult
     func enforce() -> StatusInfo {
         config = ConfigSchema.parse(data: FileManager.default.contents(atPath: FocusGuardConfig.configFile))
-        let domains = readBlockedDomains()
+        let userDomains = readBlockedDomains()
+        // Always-on hardening: enforced in /etc/hosts even during an unlock window,
+        // and deliberately kept OUT of status/sync so the list never surfaces.
+        let alwaysDomains = config.extraBlocking ? ExtraBlocklist.domains : []
         let blockedApps = readBlockedApps()
+        let enforcedApps = config.blockTor ? blockedApps + [FocusGuardConfig.torBrowserAppName] : blockedApps
         let now = Date()
         let nowMono = Daemon.monotonicNanos()
         let today = Daemon.todayString()
@@ -152,20 +160,20 @@ final class Daemon {
             }
         }
 
-        applyHosts(domains: domains, shouldBlock: shouldBlock)
+        applyHosts(userDomains: userDomains, alwaysDomains: alwaysDomains, shouldBlock: shouldBlock)
 
         // --- App blocking (only while effectively locked) ---
-        if shouldBlock && !blockedApps.isEmpty {
-            stats.recordAppsKilled(AppBlocker.killBlockedApps(blockedApps, log: { [weak self] in self?.log($0) }))
+        if shouldBlock && !enforcedApps.isEmpty {
+            stats.recordAppsKilled(AppBlocker.killBlockedApps(enforcedApps, log: { [weak self] in self?.log($0) }))
         }
         lastShouldBlock = shouldBlock
-        lastBlockedApps = blockedApps
+        lastBlockedApps = enforcedApps
 
         // --- Status output ---
         let finalCount = currentUnlocksToday(now: now, nowMono: nowMono, today: today)
         let info = StatusInfo(
             status: status,
-            blockedDomains: domains,
+            blockedDomains: userDomains,
             unlockRequestTime: readUnlockRequestTime(),
             unlockDelay: EscalationMath.currentDelay(base: config.unlockDelay, unlocksToday: finalCount),
             lastEnforced: now,
@@ -182,32 +190,33 @@ final class Daemon {
             daemonVersion: FocusGuardConfig.daemonProtocolVersion
         )
         writeStatus(info)
-        syncToCloud(domains: domains, locked: shouldBlock, cooldownEnd: activeCooldownEnd)
+        syncToCloud(domains: userDomains, locked: shouldBlock, cooldownEnd: activeCooldownEnd)
         return info
     }
 
-    private func applyHosts(domains: [String], shouldBlock: Bool) {
+    /// Writes the hosts block. `userDomains` are blocked only while locked;
+    /// `alwaysDomains` (the always-on extra blocklist, `ExtraBlocklist`) are blocked
+    /// regardless of lock state, so an earned unlock frees user domains only.
+    /// Order preserved, deduped.
+    private func applyHosts(userDomains: [String], alwaysDomains: [String], shouldBlock: Bool) {
         let current = HostsWriter.currentHosts()
-        if shouldBlock {
-            if !domains.isEmpty {
-                let expected = HostsWriter.expectedHosts(domains: domains)
-                if current != expected {
-                    HostsWriter.write(expected, log: { [weak self] in self?.log($0) })
-                    stats.recordHostsRewrite()
-                    flushDNS()
-                }
-            } else if current.contains(HostsWriter.markerStart) {
-                HostsWriter.write(HostsWriter.cleanHosts(), log: { [weak self] in self?.log($0) })
+        var seen = Set<String>()
+        let effective = ((shouldBlock ? userDomains : []) + alwaysDomains)
+            .filter { seen.insert($0).inserted }
+
+        if !effective.isEmpty {
+            let expected = HostsWriter.expectedHosts(domains: effective)
+            if current != expected {
+                HostsWriter.write(expected, log: { [weak self] in self?.log($0) })
+                stats.recordHostsRewrite()
                 flushDNS()
             }
-            lockFiles()
-        } else {
-            unlockFiles()
-            if current.contains(HostsWriter.markerStart) {
-                HostsWriter.write(HostsWriter.cleanHosts(), log: { [weak self] in self?.log($0) })
-                flushDNS()
-            }
+        } else if current.contains(HostsWriter.markerStart) {
+            HostsWriter.write(HostsWriter.cleanHosts(), log: { [weak self] in self?.log($0) })
+            flushDNS()
         }
+
+        if shouldBlock { lockFiles() } else { unlockFiles() }
     }
 
     private func appCheckTick() {
@@ -481,14 +490,25 @@ final class Daemon {
         runShell("chflags -R noschg /Applications/FocusGuard.app 2>/dev/null")
     }
 
-    // MARK: - Chrome DoH policy
+    // MARK: - Browser policy (delivered via configuration profile)
 
-    private func enforceChromePolicy() {
-        let prefsDir = FocusGuardConfig.chromePrefsDir
-        let plistName = FocusGuardConfig.chromePlistName
-        runShell("mkdir -p '\(prefsDir)'")
-        runShell("defaults write '\(prefsDir)/\(plistName)' DnsOverHttpsMode -string 'off'")
-        log("Chrome DoH policy set to off")
+    /// Browser enterprise policy (Brave `TorDisabled`, Chrome/Brave
+    /// `DnsOverHttpsMode=off`) can only come from a configuration profile on modern
+    /// macOS -- `/Library/Managed Preferences` is sourced solely from profiles, so a
+    /// daemon `defaults write` there is a silent no-op (and could fight the profile).
+    /// We therefore only VERIFY the profile is present: the OS materialises the
+    /// managed plist once the profile is installed. Install/refresh it from
+    /// Resources/FocusGuard-Browser-Policy.mobileconfig.
+    private func verifyBrowserPolicy(verbose: Bool = false) {
+        guard config.blockTor else { return }
+        let bravePolicyPlist = "\(FocusGuardConfig.chromePrefsDir)/\(FocusGuardConfig.bravePlistName).plist"
+        let installed = FileManager.default.fileExists(atPath: bravePolicyPlist)
+        if verbose || !browserPolicyLogged {
+            log(installed
+                ? "Browser policy profile active (Brave Tor + DoH disabled)"
+                : "Browser policy profile NOT installed -- Brave Tor/DoH unenforced (install FocusGuard-Browser-Policy.mobileconfig)")
+            browserPolicyLogged = true
+        }
     }
 
     // MARK: - Cloud sync (fire-and-forget, unchanged behavior)

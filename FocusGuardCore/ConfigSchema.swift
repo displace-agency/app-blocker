@@ -11,6 +11,9 @@ public struct DaemonConfig: Equatable {
     public var schedules: [Schedule]
     public var workerUrl: String?
     public var workerApiKey: String?
+    /// Always-on hardening (default true). Enforced even during an unlock window.
+    public var extraBlocking: Bool
+    public var blockTor: Bool
 
     public init(
         version: Int = FocusGuardConfig.currentConfigVersion,
@@ -20,7 +23,9 @@ public struct DaemonConfig: Equatable {
         appCheckInterval: Int = FocusGuardConfig.defaultAppCheckInterval,
         schedules: [Schedule] = [],
         workerUrl: String? = nil,
-        workerApiKey: String? = nil
+        workerApiKey: String? = nil,
+        extraBlocking: Bool = FocusGuardConfig.defaultExtraBlocking,
+        blockTor: Bool = FocusGuardConfig.defaultBlockTor
     ) {
         self.version = version
         self.unlockDelay = unlockDelay
@@ -30,6 +35,8 @@ public struct DaemonConfig: Equatable {
         self.schedules = schedules
         self.workerUrl = workerUrl
         self.workerApiKey = workerApiKey
+        self.extraBlocking = extraBlocking
+        self.blockTor = blockTor
     }
 }
 
@@ -60,7 +67,9 @@ public enum ConfigSchema {
             appCheckInterval: clampAppInterval((json["appCheckInterval"] as? Int) ?? FocusGuardConfig.defaultAppCheckInterval),
             schedules: schedules,
             workerUrl: json["workerUrl"] as? String,
-            workerApiKey: json["workerApiKey"] as? String
+            workerApiKey: json["workerApiKey"] as? String,
+            extraBlocking: (json["extraBlocking"] as? Bool) ?? FocusGuardConfig.defaultExtraBlocking,
+            blockTor: (json["blockTor"] as? Bool) ?? FocusGuardConfig.defaultBlockTor
         )
     }
 
@@ -90,6 +99,8 @@ public enum ConfigSchema {
                 ] as [String: Any]
             },
         ]
+        dict["extraBlocking"] = config.extraBlocking
+        dict["blockTor"] = config.blockTor
         if let url = config.workerUrl { dict["workerUrl"] = url }
         if let key = config.workerApiKey { dict["workerApiKey"] = key }
         return try? JSONSerialization.data(withJSONObject: dict, options: [.prettyPrinted, .sortedKeys])

@@ -31,7 +31,7 @@ public enum FocusGuardConfig {
     public static let defaultMaxUnlocksPerDay: Int = 2
     public static let defaultCooldownDuration: Int = 900 // 15 minutes
     public static let defaultAppCheckInterval: Int = 10 // seconds
-    public static let currentConfigVersion: Int = 2
+    public static let currentConfigVersion: Int = 3
     /// Bumped whenever the app<->daemon contract changes. Surfaced in StatusInfo
     /// so the app can warn when it is talking to an out-of-date daemon.
     public static let daemonProtocolVersion: Int = 2
@@ -41,6 +41,14 @@ public enum FocusGuardConfig {
 
     public static let chromePrefsDir = "/Library/Managed Preferences"
     public static let chromePlistName = "com.google.Chrome"
+    public static let bravePlistName = "com.brave.Browser"
+
+    /// App-bundle name (without ".app") force-killed while Tor blocking is on.
+    public static let torBrowserAppName = "Tor Browser"
+
+    /// Always-on hardening defaults (see DaemonConfig.extraBlocking / blockTor).
+    public static let defaultExtraBlocking = true
+    public static let defaultBlockTor = true
 }
 
 /// The current state of the blocker
