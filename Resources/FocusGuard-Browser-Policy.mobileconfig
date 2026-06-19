@@ -13,7 +13,7 @@
     <key>PayloadDisplayName</key>
     <string>FocusGuard Browser Policy</string>
     <key>PayloadDescription</key>
-    <string>Disables Brave's Tor windows and turns off DNS-over-HTTPS in Brave and Chrome so they cannot bypass the system blocklist.</string>
+    <string>Blocks the configured URL list in Brave and Chrome (including Brave Tor windows) and turns off DNS-over-HTTPS so they cannot resolve around the system blocklist.</string>
     <key>PayloadOrganization</key>
     <string>FocusGuard</string>
     <key>PayloadScope</key>
@@ -37,10 +37,13 @@
             <string>Brave Policy</string>
             <key>PayloadEnabled</key>
             <true/>
-            <key>TorDisabled</key>
-            <true/>
             <key>DnsOverHttpsMode</key>
             <string>off</string>
+            <!-- URLBlocklist is populated locally by Scripts/make-browser-profile.sh and
+                 kept out of this public template. It blocks the listed domains in ALL
+                 Brave windows, including Tor windows (browser-level, pre-network). -->
+            <key>URLBlocklist</key>
+            <array/>
         </dict>
         <dict>
             <key>PayloadType</key>

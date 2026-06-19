@@ -492,21 +492,23 @@ final class Daemon {
 
     // MARK: - Browser policy (delivered via configuration profile)
 
-    /// Browser enterprise policy (Brave `TorDisabled`, Chrome/Brave
+    /// Browser enterprise policy (Brave `URLBlocklist` + Chrome/Brave
     /// `DnsOverHttpsMode=off`) can only come from a configuration profile on modern
     /// macOS -- `/Library/Managed Preferences` is sourced solely from profiles, so a
     /// daemon `defaults write` there is a silent no-op (and could fight the profile).
     /// We therefore only VERIFY the profile is present: the OS materialises the
-    /// managed plist once the profile is installed. Install/refresh it from
-    /// Resources/FocusGuard-Browser-Policy.mobileconfig.
+    /// managed plist once the profile is installed. `URLBlocklist` blocks the always-on
+    /// list in every Brave window INCLUDING Tor windows (enforced pre-network), so
+    /// Brave's Tor feature stays usable. Build/refresh the populated profile with
+    /// Scripts/make-browser-profile.sh, then install it.
     private func verifyBrowserPolicy(verbose: Bool = false) {
         guard config.blockTor else { return }
         let bravePolicyPlist = "\(FocusGuardConfig.chromePrefsDir)/\(FocusGuardConfig.bravePlistName).plist"
         let installed = FileManager.default.fileExists(atPath: bravePolicyPlist)
         if verbose || !browserPolicyLogged {
             log(installed
-                ? "Browser policy profile active (Brave Tor + DoH disabled)"
-                : "Browser policy profile NOT installed -- Brave Tor/DoH unenforced (install FocusGuard-Browser-Policy.mobileconfig)")
+                ? "Browser policy profile active (URLBlocklist + DoH off)"
+                : "Browser policy profile NOT installed -- blocklist not enforced in Brave Tor windows (run Scripts/make-browser-profile.sh and install it)")
             browserPolicyLogged = true
         }
     }

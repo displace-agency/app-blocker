@@ -33,12 +33,16 @@ unlike the user blocklist, are NOT freed by an unlock:
 - **`ExtraBlocklist`** (`FocusGuardShared/ExtraBlocklist.swift`): a compiled-in
   always-on blocklist, enforced even during an unlock window, kept out of
   `blocked.txt` / `StatusInfo` / the UI by design.
-- **`blockTor`**: Brave `TorDisabled` + Brave/Chrome DoH-off, delivered via
-  `Resources/FocusGuard-Browser-Policy.mobileconfig`. On macOS 13+, browser
-  enterprise policy can only come from a configuration profile, not a daemon
-  `defaults write` to `/Library/Managed Preferences` (that is a silent no-op). The
-  daemon only *verifies* the profile is installed and force-quits a standalone
-  Tor Browser.
+- **`blockTor`**: Brave `URLBlocklist` (blocks the always-on list in EVERY Brave
+  window, including Tor windows, since it is enforced pre-network) + Brave/Chrome
+  DoH-off, delivered via a configuration profile. On macOS 13+, browser enterprise
+  policy can only come from a profile, not a daemon `defaults write` to
+  `/Library/Managed Preferences` (silent no-op). Brave's Tor feature stays ENABLED;
+  the list is just blocked inside it. The committed
+  `Resources/FocusGuard-Browser-Policy.mobileconfig` ships an EMPTY URLBlocklist;
+  `Scripts/make-browser-profile.sh` builds the populated
+  `...-Browser-Policy.local.mobileconfig` (gitignored). The daemon only *verifies* the
+  profile is installed and force-quits a standalone Tor Browser.
 
 ### Privacy: ExtraBlocklist stays EMPTY in the repo
 

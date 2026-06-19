@@ -45,7 +45,7 @@ seconds. FocusGuard closes those escape hatches:
 | Root LaunchDaemon | No `.app` bundle for cleaners to find or quit |
 | `chflags schg` | App, daemon, and config are immutable when locked, even under `sudo` |
 | 30s re-enforcement | Manual `/etc/hosts` edits are reverted automatically |
-| Browser policy profile | Disables Brave's Tor windows and turns off DNS-over-HTTPS in Brave and Chrome, so a browser can't resolve *around* `/etc/hosts` |
+| Browser policy profile | Blocks the list inside Brave via `URLBlocklist` (works even in Tor windows, since it is enforced before the request leaves) and turns off DNS-over-HTTPS in Brave and Chrome |
 | Authenticated IPC | Commands go over a root-owned Unix socket, authenticated by peer UID (no world-writable command file) |
 | Monotonic-clock budget | The daily unlock budget uses a monotonic clock, so rewinding the system clock can't re-arm it |
 | Always-on extra list | An optional compiled-in blocklist that stays blocked even during an unlock window |
@@ -76,19 +76,22 @@ checkmark when all of its domains are already blocked.
 
 ## Browser policy profile (recommended)
 
-Modern macOS only honors browser enterprise policy delivered through a **configuration
-profile**, so FocusGuard ships one at `Resources/FocusGuard-Browser-Policy.mobileconfig`.
-It:
+Tor windows and DNS-over-HTTPS both resolve names *without* consulting `/etc/hosts`, so
+they can tunnel around the system blocklist. FocusGuard closes this at the browser layer
+with a **configuration profile** (the only way to set browser policy on modern macOS):
 
-- disables Brave's "New private window with Tor" (a route that otherwise tunnels
-  around `/etc/hosts`), and
-- turns off DNS-over-HTTPS in Brave and Chrome (DoH lets a browser resolve names
-  without consulting `/etc/hosts`).
+- **`URLBlocklist`** blocks the configured domains in **every** Brave window, including
+  "New private window with Tor". Because it is enforced before the request leaves the
+  browser, it works even over Tor, so you keep the Tor feature while the blocklist still
+  holds.
+- **DNS-over-HTTPS off** in Brave and Chrome, so neither resolves around `/etc/hosts`.
 
-Install it once:
+The committed profile ships with an empty `URLBlocklist`. Populate it from your
+always-on list, then install:
 
 ```bash
-open Resources/FocusGuard-Browser-Policy.mobileconfig
+bash Scripts/make-browser-profile.sh   # writes Resources/FocusGuard-Browser-Policy.local.mobileconfig
+open Resources/FocusGuard-Browser-Policy.local.mobileconfig
 ```
 
 Then approve it in **System Settings > General > Device Management** and restart your
@@ -130,7 +133,7 @@ Edit `/etc/focusguard/config.json` (the daemon clamps every value to a safe rang
 | `maxUnlocksPerDay` | `2` | Daily unlock budget |
 | `cooldownDuration` | `900` | Unlocked window in seconds (15 min) |
 | `appCheckInterval` | `10` | How often (seconds) blocked apps are swept |
-| `blockTor` | `true` | Keep Tor bypass routes closed (verifies the browser profile; force-quits Tor Browser) |
+| `blockTor` | `true` | Keep Tor bypass routes covered (verifies the URLBlocklist profile is installed; force-quits a standalone Tor Browser) |
 | `extraBlocking` | `true` | Enforce the compiled-in always-on extra blocklist |
 
 ## Menu bar states

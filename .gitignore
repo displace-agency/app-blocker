@@ -24,3 +24,6 @@ node_modules/
 
 # Embedded app (separate git repo — managed independently)
 website/
+
+# Local-only browser policy profile (populated URLBlocklist; never push the list)
+*.local.mobileconfig
