@@ -31,6 +31,7 @@ final class Daemon {
     private var appTimer: DispatchSourceTimer?
     private let cachedBootId: String
     private var browserPolicyLogged = false
+    private var dnsProfileLogged = false
 
     init() {
         self.config = ConfigSchema.parse(data: FileManager.default.contents(atPath: FocusGuardConfig.configFile))
@@ -48,6 +49,7 @@ final class Daemon {
         unlink(FocusGuardConfig.legacyCommandFile) // retire the old world-writable IPC file
         migrateConfigIfNeeded()
         verifyBrowserPolicy(verbose: true)
+        verifyDnsProfile(verbose: true)
 
         socketServer = SocketServer(
             path: FocusGuardConfig.socketPath,
@@ -64,6 +66,7 @@ final class Daemon {
         et.setEventHandler { [weak self] in
             _ = self?.enforce()
             self?.verifyBrowserPolicy() // verify profile presence, silent
+            self?.verifyDnsProfile()    // verify category-DNS profile presence, silent
         }
         et.resume()
         enforceTimer = et
@@ -513,6 +516,28 @@ final class Daemon {
         }
     }
 
+    // MARK: - Category DNS profile (Cloudflare 1.1.1.1 for Families)
+
+    /// The Mac routes system DNS through Cloudflare 1.1.1.1 for Families via a managed DoH
+    /// configuration profile (Resources/FocusGuard-Mac-DNS.mobileconfig), blocking the whole
+    /// adult-content category + malware system-wide, UNDER the /etc/hosts list. Like the
+    /// browser policy, the daemon can only VERIFY it -- a profile cannot be installed without
+    /// user approval -- so we check that the Families resolver is actually the active system
+    /// DNS via `scutil --dns`. Gated on extraBlocking (same adult-blocking intent). Log-only
+    /// nudge; it never weakens anything.
+    private func verifyDnsProfile(verbose: Bool = false) {
+        guard config.extraBlocking else { return }
+        let dns = runShellOutput("/usr/sbin/scutil --dns")
+        let active = dns.contains(FocusGuardConfig.dnsDohHost)
+            || dns.contains(FocusGuardConfig.dnsBootstrapIP)
+        if verbose || !dnsProfileLogged {
+            log(active
+                ? "Category-DNS profile active (Cloudflare Families: adult + malware, system-wide)"
+                : "Category-DNS profile NOT active -- adult category not blocked system-wide (install Resources/FocusGuard-Mac-DNS.mobileconfig)")
+            dnsProfileLogged = true
+        }
+    }
+
     // MARK: - Cloud sync (fire-and-forget, unchanged behavior)
 
     private var lastSyncHash = ""
@@ -552,6 +577,26 @@ final class Daemon {
         process.standardError = FileHandle.nullDevice
         do { try process.run(); process.waitUntilExit() }
         catch { log("Failed to run: \(command) - \(error)") }
+    }
+
+    /// Like runShell, but captures and returns stdout. For small read-only system queries
+    /// (e.g. `scutil --dns`); output fits the pipe buffer so read-then-wait cannot deadlock.
+    private func runShellOutput(_ command: String) -> String {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = ["-c", command]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+        do {
+            try process.run()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
+            return String(data: data, encoding: .utf8) ?? ""
+        } catch {
+            log("Failed to run: \(command) - \(error)")
+            return ""
+        }
     }
 
     private func flushDNS() {

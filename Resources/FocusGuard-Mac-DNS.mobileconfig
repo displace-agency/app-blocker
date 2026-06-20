@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>PayloadContent</key>
+  <array>
+    <dict>
+      <key>PayloadType</key>
+      <string>com.apple.dnsSettings.managed</string>
+      <key>PayloadVersion</key>
+      <integer>1</integer>
+      <key>PayloadIdentifier</key>
+      <string>com.focusguard.macdns.settings</string>
+      <key>PayloadUUID</key>
+      <string>C26C3D9E-48D2-42AC-93BE-C847C8EA4EDF</string>
+      <key>PayloadDisplayName</key>
+      <string>FocusGuard DNS (Cloudflare Families)</string>
+      <key>PayloadDescription</key>
+      <string>Routes system DNS through Cloudflare 1.1.1.1 for Families, which blocks adult content and malware across every browser and app on this Mac.</string>
+      <key>DNSSettings</key>
+      <dict>
+        <key>DNSProtocol</key>
+        <string>HTTPS</string>
+        <key>ServerURL</key>
+        <string>https://family.cloudflare-dns.com/dns-query</string>
+        <key>ServerAddresses</key>
+        <array>
+          <string>1.1.1.3</string>
+          <string>1.0.0.3</string>
+          <string>2606:4700:4700::1113</string>
+          <string>2606:4700:4700::1003</string>
+        </array>
+      </dict>
+    </dict>
+  </array>
+  <key>PayloadDisplayName</key>
+  <string>FocusGuard DNS (Cloudflare Families)</string>
+  <key>PayloadDescription</key>
+  <string>System-wide content-filtering DNS for this Mac. Blocks the entire adult-content category plus malware/phishing across all browsers and apps. Part of FocusGuard. The local /etc/hosts blocklist still applies on top of this.</string>
+  <key>PayloadIdentifier</key>
+  <string>com.focusguard.macdns</string>
+  <key>PayloadOrganization</key>
+  <string>FocusGuard</string>
+  <key>PayloadRemovalDisallowed</key>
+  <false/>
+  <key>PayloadScope</key>
+  <string>System</string>
+  <key>PayloadType</key>
+  <string>Configuration</string>
+  <key>PayloadUUID</key>
+  <string>44CBB61F-C0BE-47FA-A607-937839DAD028</string>
+  <key>PayloadVersion</key>
+  <integer>1</integer>
+</dict>
+</plist>

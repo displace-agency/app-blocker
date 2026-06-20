@@ -46,6 +46,15 @@ public enum FocusGuardConfig {
     /// App-bundle name (without ".app") force-killed while Tor blocking is on.
     public static let torBrowserAppName = "Tor Browser"
 
+    /// Mac category-DNS profile (Cloudflare 1.1.1.1 for Families) -- blocks the whole
+    /// adult-content category + malware system-wide, under the /etc/hosts list. The daemon
+    /// only VERIFIES it (a profile cannot be installed without user approval); presence is
+    /// detected by the Families resolver being the active system DNS in `scutil --dns`.
+    /// See Resources/FocusGuard-Mac-DNS.mobileconfig.
+    public static let dnsProfileIdentifier = "com.focusguard.macdns"
+    public static let dnsDohHost = "family.cloudflare-dns.com"
+    public static let dnsBootstrapIP = "1.1.1.3"
+
     /// Always-on hardening defaults (see DaemonConfig.extraBlocking / blockTor).
     public static let defaultExtraBlocking = true
     public static let defaultBlockTor = true

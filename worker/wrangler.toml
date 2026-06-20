@@ -7,7 +7,10 @@ binding = "BLOCKLIST"
 id = "ee41cb9716bb4c47aa237e942ce0cf35"
 
 [vars]
-UPSTREAM_DOH = "https://cloudflare-dns.com/dns-query"
+# 1.1.1.1 for Families (malware + adult-content category). Non-KV queries that the
+# worker does not block locally are resolved through this, so every device pointed at
+# the worker (e.g. iPhone) inherits Cloudflare's whole adult category, auto-updated.
+UPSTREAM_DOH = "https://family.cloudflare-dns.com/dns-query"
 
 # API_KEY is injected as a Cloudflare Worker secret, not a plaintext var.
 # Set it once per environment:
