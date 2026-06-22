@@ -45,7 +45,8 @@ seconds. FocusGuard closes those escape hatches:
 | Root LaunchDaemon | No `.app` bundle for cleaners to find or quit |
 | `chflags schg` | App, daemon, and config are immutable when locked, even under `sudo` |
 | 30s re-enforcement | Manual `/etc/hosts` edits are reverted automatically |
-| Browser policy profile | Blocks the list inside Brave via `URLBlocklist` (works even in Tor windows, since it is enforced before the request leaves) and turns off DNS-over-HTTPS in Brave and Chrome |
+| Browser policy profile | Disables Brave's Tor feature (`TorDisabled`), turns off DNS-over-HTTPS in Brave and Chrome, and enforces the list via `URLBlocklist` |
+| Category DNS (Cloudflare Families) | A managed-DoH profile routes system DNS through 1.1.1.1 for Families, blocking the whole adult-content category + malware across every app |
 | Authenticated IPC | Commands go over a root-owned Unix socket, authenticated by peer UID (no world-writable command file) |
 | Monotonic-clock budget | The daily unlock budget uses a monotonic clock, so rewinding the system clock can't re-arm it |
 | Always-on extra list | An optional compiled-in blocklist that stays blocked even during an unlock window |
@@ -76,15 +77,17 @@ checkmark when all of its domains are already blocked.
 
 ## Browser policy profile (recommended)
 
-Tor windows and DNS-over-HTTPS both resolve names *without* consulting `/etc/hosts`, so
-they can tunnel around the system blocklist. FocusGuard closes this at the browser layer
-with a **configuration profile** (the only way to set browser policy on modern macOS):
+Tor windows and DNS-over-HTTPS both resolve names *without* consulting `/etc/hosts` (Tor
+resolves at the exit node), so they tunnel around both the system blocklist and the
+category-DNS filter. FocusGuard closes this at the browser layer with a **configuration
+profile** (the only way to set browser policy on modern macOS):
 
-- **`URLBlocklist`** blocks the configured domains in **every** Brave window, including
-  "New private window with Tor". Because it is enforced before the request leaves the
-  browser, it works even over Tor, so you keep the Tor feature while the blocklist still
-  holds.
-- **DNS-over-HTTPS off** in Brave and Chrome, so neither resolves around `/etc/hosts`.
+- **Brave Tor disabled** (`TorDisabled`). No local DNS filter can reach Tor traffic, so the
+  feature is turned off rather than left as an escape hatch.
+- **DNS-over-HTTPS off** in Brave and Chrome, so neither resolves around `/etc/hosts` or the
+  category-DNS profile.
+- **`URLBlocklist`** blocks the configured domains in every Brave window as a second,
+  pre-network layer.
 
 The committed profile ships with an empty `URLBlocklist`. Populate it from your
 always-on list, then install:
@@ -96,6 +99,24 @@ open Resources/FocusGuard-Browser-Policy.local.mobileconfig
 
 Then approve it in **System Settings > General > Device Management** and restart your
 browser. Removing the profile later requires your admin password.
+
+## Category DNS — Cloudflare 1.1.1.1 for Families (recommended)
+
+A hand-maintained blocklist cannot scale to the whole adult web. The category-DNS profile
+routes system DNS through Cloudflare's **1.1.1.1 for Families** (`family.cloudflare-dns.com`),
+which blocks the entire adult-content category plus malware (millions of domains,
+auto-updated) across every browser and app, **under** your `/etc/hosts` list. It is delivered
+as a managed-DoH configuration profile, so it cannot be overridden in Network settings and
+removal needs admin:
+
+```bash
+open Resources/FocusGuard-Mac-DNS.mobileconfig
+```
+
+Approve it in **System Settings > General > Device Management**. The optional `focusguard-dns`
+Cloudflare Worker uses the same Families upstream, so any device pointed at it (e.g. an iPhone)
+inherits the category block. Verify with the **system resolver** (not `dig` or `scutil`, which
+bypass profile-delivered DoH): `dscacheutil -q host -a name <site>` returns `0.0.0.0` when blocked.
 
 ## Installation
 
@@ -133,7 +154,7 @@ Edit `/etc/focusguard/config.json` (the daemon clamps every value to a safe rang
 | `maxUnlocksPerDay` | `2` | Daily unlock budget |
 | `cooldownDuration` | `900` | Unlocked window in seconds (15 min) |
 | `appCheckInterval` | `10` | How often (seconds) blocked apps are swept |
-| `blockTor` | `true` | Keep Tor bypass routes covered (verifies the URLBlocklist profile is installed; force-quits a standalone Tor Browser) |
+| `blockTor` | `true` | Keep Tor routes closed (verifies the browser policy profile with `TorDisabled` is installed; force-quits a standalone Tor Browser) |
 | `extraBlocking` | `true` | Enforce the compiled-in always-on extra blocklist |
 
 ## Menu bar states
@@ -184,8 +205,8 @@ sudo sed -i '' '/FOCUSGUARD-START/,/FOCUSGUARD-END/d' /etc/hosts
 sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder
 ```
 
-Then remove the "FocusGuard Browser Policy" profile in **System Settings > General >
-Device Management**.
+Then remove the "FocusGuard Browser Policy" and "FocusGuard DNS (Cloudflare Families)"
+profiles in **System Settings > General > Device Management**.
 
 ## AI assistant policy
 

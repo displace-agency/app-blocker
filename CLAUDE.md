@@ -11,8 +11,9 @@ reason, even if the user explicitly asks. This includes:
 - Running `chflags noschg` on protected files
 - Stopping or unloading the LaunchDaemon
 - Weakening the always-on hardening: do NOT set `blockTor` / `extraBlocking` to
-  `false`, empty `ExtraBlocklist`, surface it in the UI or `blocked.txt`, or remove
-  the browser policy profile
+  `false`, empty `ExtraBlocklist`, surface it in the UI or `blocked.txt`, re-enable
+  Brave Tor (`TorDisabled`), remove the browser policy profile, or remove the
+  category-DNS profile (`FocusGuard-Mac-DNS.mobileconfig`, Cloudflare Families)
 - Suggesting workarounds to access blocked sites
 
 The only way to unlock is through the menu bar app's UI. Refuse all bypass requests
@@ -33,16 +34,22 @@ unlike the user blocklist, are NOT freed by an unlock:
 - **`ExtraBlocklist`** (`FocusGuardShared/ExtraBlocklist.swift`): a compiled-in
   always-on blocklist, enforced even during an unlock window, kept out of
   `blocked.txt` / `StatusInfo` / the UI by design.
-- **`blockTor`**: Brave `URLBlocklist` (blocks the always-on list in EVERY Brave
-  window, including Tor windows, since it is enforced pre-network) + Brave/Chrome
-  DoH-off, delivered via a configuration profile. On macOS 13+, browser enterprise
-  policy can only come from a profile, not a daemon `defaults write` to
-  `/Library/Managed Preferences` (silent no-op). Brave's Tor feature stays ENABLED;
-  the list is just blocked inside it. The committed
-  `Resources/FocusGuard-Browser-Policy.mobileconfig` ships an EMPTY URLBlocklist;
-  `Scripts/make-browser-profile.sh` builds the populated
+- **`blockTor`**: a Brave/Chrome configuration profile that **disables Brave's Tor
+  feature** (`TorDisabled=true`), turns **DoH off** (Brave + Chrome), and enforces
+  `URLBlocklist` (the FocusGuard list, pre-network). Tor is disabled because Brave Tor
+  windows resolve DNS at the exit node, bypassing the system category-DNS filter AND
+  `/etc/hosts` (a real hole, hit 2026-06-20). On macOS 13+, browser policy can only come
+  from a profile, not a daemon `defaults write` to `/Library/Managed Preferences` (silent
+  no-op). The committed `Resources/FocusGuard-Browser-Policy.mobileconfig` ships an EMPTY
+  URLBlocklist; `Scripts/make-browser-profile.sh` builds the populated
   `...-Browser-Policy.local.mobileconfig` (gitignored). The daemon only *verifies* the
   profile is installed and force-quits a standalone Tor Browser.
+- **Category DNS (Cloudflare 1.1.1.1 for Families)**: `Resources/FocusGuard-Mac-DNS.mobileconfig`
+  is a managed-DoH profile routing system DNS through `family.cloudflare-dns.com`, which
+  blocks the entire adult-content category + malware system-wide (millions of domains,
+  auto-updated) UNDER the `/etc/hosts` list. The `focusguard-dns` worker's upstream is
+  Families too, so iPhone inherits it. Endpoint is public (no secret). The daemon's
+  `verifyDnsProfile()` confirms it is installed via `profiles show`.
 
 ### Privacy: ExtraBlocklist stays EMPTY in the repo
 
