@@ -39,6 +39,10 @@
             <true/>
             <key>DnsOverHttpsMode</key>
             <string>off</string>
+            <!-- Tor disabled: Brave Tor windows resolve DNS at the exit node, bypassing the
+                 system Families filter and /etc/hosts, so they were a category-blocking hole. -->
+            <key>TorDisabled</key>
+            <true/>
             <!-- URLBlocklist is populated locally by Scripts/make-browser-profile.sh and
                  kept out of this public template. It blocks the listed domains in ALL
                  Brave windows, including Tor windows (browser-level, pre-network). -->

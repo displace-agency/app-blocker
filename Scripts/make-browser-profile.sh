@@ -3,10 +3,10 @@
 # Generate the LOCAL browser policy profile with URLBlocklist populated from
 # ExtraBlocklist.swift PLUS the user blocklist (/etc/focusguard/blocked.txt).
 #
-# URLBlocklist is enforced by the browser at the navigation layer (before the request
-# leaves), so it blocks the listed domains in ALL Brave windows -- including "New
-# private window with Tor", where /etc/hosts is bypassed. This keeps Brave's Tor
-# feature usable while still blocking the full FocusGuard blocklist inside it.
+# Brave's Tor feature is DISABLED here (TorDisabled=true): Tor windows resolve DNS at the
+# exit node, bypassing the system Families filter + /etc/hosts entirely, so they were a
+# category-blocking hole. With Tor off, all Brave traffic uses system DNS. URLBlocklist
+# (enforced pre-network) still blocks the full FocusGuard list as a second layer.
 #
 # Re-run this and reinstall the profile whenever you change your blocklist (normal
 # windows update live via /etc/hosts; Tor coverage only refreshes on regenerate).
@@ -72,6 +72,7 @@ cat > "$OUT" <<PROFILE
             <key>PayloadDisplayName</key><string>Brave Policy</string>
             <key>PayloadEnabled</key><true/>
             <key>DnsOverHttpsMode</key><string>off</string>
+            <key>TorDisabled</key><true/>
             <key>URLBlocklist</key>
             <array>
 ${entries}            </array>

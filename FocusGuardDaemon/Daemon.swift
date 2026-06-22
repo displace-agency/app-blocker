@@ -527,9 +527,12 @@ final class Daemon {
     /// nudge; it never weakens anything.
     private func verifyDnsProfile(verbose: Bool = false) {
         guard config.extraBlocking else { return }
-        let dns = runShellOutput("/usr/sbin/scutil --dns")
-        let active = dns.contains(FocusGuardConfig.dnsDohHost)
-            || dns.contains(FocusGuardConfig.dnsBootstrapIP)
+        // The daemon is root, so it enumerates installed configuration profiles and matches ours
+        // by identifier. NOTE: `scutil --dns` does NOT surface a profile-delivered DoH resolver
+        // and `dig` bypasses it, so neither can detect this -- only the installed-profile list
+        // reflects it. `profiles show` prints a line `profileIdentifier: com.focusguard.macdns`.
+        let installed = runShellOutput("/usr/bin/profiles show 2>/dev/null")
+        let active = installed.contains(FocusGuardConfig.dnsProfileIdentifier)
         if verbose || !dnsProfileLogged {
             log(active
                 ? "Category-DNS profile active (Cloudflare Families: adult + malware, system-wide)"
