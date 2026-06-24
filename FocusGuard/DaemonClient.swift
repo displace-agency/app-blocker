@@ -49,6 +49,11 @@ final class DaemonClient: ObservableObject {
     }
     var schedules: [Schedule] { info.schedules ?? [] }
     var stats: StatsSummary { info.stats ?? StatsSummary() }
+    /// Sites the installed browser policy profile still blocks that the daemon isn't
+    /// enforcing right now (so the browser shows "blocked" even when the live list or an
+    /// unlock would allow them).
+    var browserOnlyBlocked: Set<String> { Set(info.browserOnlyBlocked ?? []) }
+    var browserProfileStale: Bool { info.browserProfileStale }
     var unlocksToday: Int { info.unlocksToday }
     var maxUnlocksPerDay: Int { info.maxUnlocksPerDay }
     var unlockDelayMinutes: Int { max(1, info.unlockDelay / 60) }
@@ -161,7 +166,14 @@ final class DaemonClient: ObservableObject {
         Task {
             let resp = await send(.removeDomain, argument: domain)
             if resp?.ok == true {
-                toasts.show("Unblocked \(domain)", style: .success) { [weak self] in self?.addDomain(domain) }
+                // Tell the truth: if the installed browser profile still lists this domain,
+                // removing it from the live list does NOT make it reachable in the browser.
+                if Set(info.browserOnlyBlocked ?? []).contains(domain) {
+                    toasts.show("Removed \(domain) — still blocked in your browser by the installed profile",
+                                style: .warning) { [weak self] in self?.addDomain(domain) }
+                } else {
+                    toasts.show("Unblocked \(domain)", style: .success) { [weak self] in self?.addDomain(domain) }
+                }
             } else {
                 pendingRemoveDomains.remove(domain)
             }

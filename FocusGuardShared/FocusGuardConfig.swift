@@ -153,6 +153,12 @@ public struct StatusInfo: Codable, Sendable {
     public var schedules: [Schedule]?
     public var stats: StatsSummary?
     public var daemonVersion: Int?
+    /// v3: domains the installed browser policy profile still blocks that the daemon is
+    /// NOT enforcing in /etc/hosts right now (a site removed from the list, or any site
+    /// during an unlock window — the browser profile has no unlock concept). The always-on
+    /// ExtraBlocklist is excluded so the private list never surfaces here. Optional for
+    /// backward/forward Codable compatibility.
+    public var browserOnlyBlocked: [String]?
 
     public init(
         status: BlockerStatus = .locked,
@@ -170,7 +176,8 @@ public struct StatusInfo: Codable, Sendable {
         blockedApps: [String]? = nil,
         schedules: [Schedule]? = nil,
         stats: StatsSummary? = nil,
-        daemonVersion: Int? = nil
+        daemonVersion: Int? = nil,
+        browserOnlyBlocked: [String]? = nil
     ) {
         self.status = status
         self.blockedDomains = blockedDomains
@@ -188,6 +195,7 @@ public struct StatusInfo: Codable, Sendable {
         self.schedules = schedules
         self.stats = stats
         self.daemonVersion = daemonVersion
+        self.browserOnlyBlocked = browserOnlyBlocked
     }
 
     /// Seconds remaining until unlock takes effect
@@ -221,6 +229,10 @@ public struct StatusInfo: Codable, Sendable {
     public var budgetExhausted: Bool {
         unlocksToday >= maxUnlocksPerDay
     }
+
+    /// True when the installed browser policy profile is blocking sites the daemon is
+    /// not currently enforcing — i.e. the browser will still show "blocked" for them.
+    public var browserProfileStale: Bool { !(browserOnlyBlocked?.isEmpty ?? true) }
 }
 
 /// Commands the app can send to the daemon over the Unix socket.

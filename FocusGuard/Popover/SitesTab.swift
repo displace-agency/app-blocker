@@ -72,6 +72,11 @@ struct SitesTab: View {
         let pending = daemon.pendingAddDomains.contains(domain) || daemon.pendingRemoveDomains.contains(domain)
         return HStack {
             Text(domain).font(.system(size: 12, design: .monospaced)).lineLimit(1)
+            if daemon.browserOnlyBlocked.contains(domain) {
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 9)).foregroundColor(.orange)
+                    .help("Still blocked in your browser by the installed profile, separate from FocusGuard's live list.")
+            }
             Spacer()
             if pending {
                 ProgressView().controlSize(.small).scaleEffect(0.6)

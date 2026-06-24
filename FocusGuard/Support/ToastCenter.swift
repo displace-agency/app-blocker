@@ -13,12 +13,13 @@ final class ToastCenter: ObservableObject {
     }
 
     enum Style {
-        case success, error, info
+        case success, error, info, warning
         var symbol: String {
             switch self {
             case .success: return "checkmark.circle.fill"
             case .error: return "exclamationmark.circle.fill"
             case .info: return "info.circle.fill"
+            case .warning: return "exclamationmark.triangle.fill"
             }
         }
         var color: Color {
@@ -26,6 +27,7 @@ final class ToastCenter: ObservableObject {
             case .success: return FG.Palette.emerald
             case .error: return .red
             case .info: return .secondary
+            case .warning: return .orange
             }
         }
     }

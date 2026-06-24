@@ -93,6 +93,64 @@ struct OfflineBanner: View {
     }
 }
 
+// MARK: - Browser-profile staleness banner
+
+/// Honest surface for FocusGuard's second enforcement plane: the installed browser
+/// policy profile (`URLBlocklist`) keeps blocking sites pre-network regardless of the
+/// daemon's lock state, so a removed site (or any site during an unlock window) can
+/// still show "blocked" in the browser. We say so plainly instead of implying access.
+struct BrowserProfileBanner: View {
+    let domains: [String]
+    @State private var showHelp = false
+
+    private let command = "bash Scripts/make-browser-profile.sh"
+
+    var body: some View {
+        Button { showHelp.toggle() } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "globe").font(.caption)
+                Text("\(domains.count) site\(domains.count == 1 ? "" : "s") still blocked in your browser")
+                    .font(.caption).fontWeight(.medium).lineLimit(1).minimumScaleFactor(0.8)
+                Spacer()
+                Image(systemName: "questionmark.circle").font(.caption)
+            }
+            .foregroundColor(.orange)
+            .padding(.horizontal, FG.Spacing.m)
+            .padding(.vertical, FG.Spacing.s)
+            .background(Color.orange.opacity(0.12))
+        }
+        .buttonStyle(.plain)
+        .popover(isPresented: $showHelp, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: FG.Spacing.s) {
+                Text("Your browser enforces a separate installed profile. These sites stay blocked in the browser even when FocusGuard's live list or an active unlock would allow them — FocusGuard can't live-edit that profile.")
+                    .font(.caption).foregroundColor(.secondary)
+                if !domains.isEmpty {
+                    Text(domains.joined(separator: ", "))
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundColor(.secondary)
+                        .textSelection(.enabled)
+                }
+                Text("To re-sync the browser profile to your current block list, regenerate and reinstall it:")
+                    .font(.caption).foregroundColor(.secondary)
+                HStack {
+                    Text(command)
+                        .font(.system(size: 11, design: .monospaced))
+                        .textSelection(.enabled)
+                        .padding(6)
+                        .background(FG.Palette.bgInset, in: RoundedRectangle(cornerRadius: 6))
+                    Button {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(command, forType: .string)
+                    } label: { Image(systemName: "doc.on.doc") }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(FG.Spacing.m)
+            .frame(width: 320)
+        }
+    }
+}
+
 // MARK: - Stat card
 
 struct StatCard: View {

@@ -32,6 +32,9 @@ struct RootView: View {
             if daemon.isOffline || daemon.isDaemonOutdated {
                 OfflineBanner(outdated: daemon.isDaemonOutdated && !daemon.isOffline)
             }
+            if daemon.browserProfileStale {
+                BrowserProfileBanner(domains: daemon.browserOnlyBlocked.sorted())
+            }
             Divider().overlay(FG.Palette.hairline)
             tabPicker
             Divider().overlay(FG.Palette.hairline)

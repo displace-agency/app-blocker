@@ -172,6 +172,16 @@ final class Daemon {
         lastShouldBlock = shouldBlock
         lastBlockedApps = enforcedApps
 
+        // Honesty signal: sites the installed browser profile still blocks that we are
+        // NOT enforcing in /etc/hosts (removed-but-stale, or any site during an unlock
+        // window). ExtraBlocklist is subtracted so the always-on list never surfaces.
+        let liveBlocked = Set((shouldBlock ? userDomains : []) + alwaysDomains)
+        let browserOnly = BrowserPolicyDiff.browserOnlyBlocked(
+            installed: installedBrowserBlocklist(),
+            liveBlocked: liveBlocked,
+            extra: Set(ExtraBlocklist.domains)
+        )
+
         // --- Status output ---
         let finalCount = currentUnlocksToday(now: now, nowMono: nowMono, today: today)
         let info = StatusInfo(
@@ -190,7 +200,8 @@ final class Daemon {
             blockedApps: blockedApps,
             schedules: config.schedules,
             stats: stats.summary(today: today),
-            daemonVersion: FocusGuardConfig.daemonProtocolVersion
+            daemonVersion: FocusGuardConfig.daemonProtocolVersion,
+            browserOnlyBlocked: browserOnly.isEmpty ? nil : browserOnly
         )
         writeStatus(info)
         syncToCloud(domains: userDomains, locked: shouldBlock, cooldownEnd: activeCooldownEnd)
@@ -514,6 +525,24 @@ final class Daemon {
                 : "Browser policy profile NOT installed -- blocklist not enforced in Brave Tor windows (run Scripts/make-browser-profile.sh and install it)")
             browserPolicyLogged = true
         }
+    }
+
+    /// The URLBlocklist macOS materialised from the installed browser policy profile
+    /// (`/Library/Managed Preferences/<browser>.plist`) — what the browser ACTUALLY
+    /// enforces, independent of FocusGuard's lock state. Empty when no profile is
+    /// installed. Read-only; never written.
+    private func installedBrowserBlocklist() -> Set<String> {
+        var result = Set<String>()
+        for name in [FocusGuardConfig.bravePlistName, FocusGuardConfig.chromePlistName] {
+            let path = "\(FocusGuardConfig.chromePrefsDir)/\(name).plist"
+            guard let dict = NSDictionary(contentsOfFile: path),
+                  let list = dict["URLBlocklist"] as? [String] else { continue }
+            for entry in list {
+                let d = entry.trimmingCharacters(in: .whitespaces).lowercased()
+                if !d.isEmpty { result.insert(d) }
+            }
+        }
+        return result
     }
 
     // MARK: - Category DNS profile (Cloudflare 1.1.1.1 for Families)
