@@ -72,6 +72,32 @@ start, and those warnings sat unread for weeks while the hosts entries looked co
 (2026-08-08, youtube.com). A block present in `/etc/hosts` proves the daemon worked, not
 that the site is unreachable.
 
+## Unlock flow, timing and notifications (v1.1, 2026-11-03)
+
+- **Timing is tamper-resistant**: unlock request and window end are stored as
+  `ClockStamp` (wall + bootId + CLOCK_MONOTONIC_RAW, `FocusGuardCore/UnlockClock.swift`,
+  unit-tested). Moving the system clock can only make FocusGuard stricter. Legacy
+  bare-number stamp files still decode.
+- **On time**: the daemon arms a one-shot timer at the next deadline (unlock, relock,
+  session end), so changes land within a second instead of on the 30 s tick.
+- **Guards**: `unlock` is accepted only from `.locked`; removals need an EARNED window
+  (`cooldownEndTime != nil`), not just "unlocked outside a schedule".
+- **Notifications** live in the app (`FocusGuard/Support/UnlockNotifier.swift`):
+  "Sites unlocked" is scheduled with the system at the deadline (+40 s grace) and
+  posted at once when the transition is seen; "5 minutes left" before relock; both
+  cleared on relock. Info.plist `NSUserNotificationAlertStyle = alert` makes them
+  persistent. They need a STABLE signature (build.sh signs with an Apple Development
+  or self-signed identity; ad-hoc never keeps the permission) and a running app.
+- **The app always runs**: `/Library/LaunchAgents/com.focusguard.app.plist`
+  (RunAtLoad + KeepAlive), installed by install.sh / update.command. No Quit item.
+- **Missing protections are visible**: the daemon publishes
+  `StatusInfo.missingProtections` (`browserPolicy`, `categoryDNS`) and the popover shows
+  a red banner; `profiles show` runs off the state queue every 10 min.
+- **update.command** stages the new build first, swaps it in, and re-bootstraps the
+  daemon on any failure (ERR trap), so an update can never leave blocking off.
+- Build cache lives in `~/Library/Caches/FocusGuard-build` (`FG_SCRATCH`): the repo
+  path has a literal `*` and an old in-repo `.build` breaks with a PCH path error.
+
 ### Privacy: ExtraBlocklist stays EMPTY in the repo
 
 This repo is **public**. `ExtraBlocklist.swift` is committed **empty**; any populated

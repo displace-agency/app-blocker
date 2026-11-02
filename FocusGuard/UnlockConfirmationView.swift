@@ -2,6 +2,7 @@ import SwiftUI
 
 struct UnlockConfirmationView: View {
     var delayMinutes: Int
+    var windowMinutes: Int = 15
     var onConfirm: () -> Void
     var onDismiss: () -> Void
 
@@ -22,7 +23,7 @@ struct UnlockConfirmationView: View {
             Text("Are you sure you want to unlock?")
                 .font(.headline)
 
-            Text("Blocks will lift in \(delayMinutes) minutes.\nYou'll have 15 minutes before auto-relock.")
+            Text("Blocks will lift in \(delayMinutes) minutes.\nYou'll have \(windowMinutes) minutes before auto-relock.\nFocusGuard will notify you when it's ready.")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)

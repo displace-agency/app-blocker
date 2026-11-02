@@ -218,3 +218,68 @@ struct TabHeader: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
+
+/// Shown when macOS notifications are off for FocusGuard: without them the
+/// "sites unlocked" and "5 minutes left" alerts never appear.
+struct NotificationsOffBanner: View {
+    var body: some View {
+        Button { UnlockNotifier.openSystemSettings() } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "bell.slash").font(.caption)
+                Text("Notifications are off. Turn them on to hear when sites unlock.")
+                    .font(.caption).fontWeight(.medium).lineLimit(2).minimumScaleFactor(0.8)
+                Spacer()
+                Image(systemName: "arrow.up.forward.square").font(.caption)
+            }
+            .foregroundColor(.orange)
+            .padding(.horizontal, FG.Spacing.m)
+            .padding(.vertical, FG.Spacing.s)
+            .background(Color.orange.opacity(0.12))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Notifications are off. Open notification settings.")
+    }
+}
+
+/// Shown when an always-on protection profile is missing (the daemon checks both).
+/// Without the browser profile, Brave Tor windows skip the blocklist; without the
+/// category-DNS profile, the system-wide adult filter is off.
+struct ProtectionMissingBanner: View {
+    let missing: [String]
+    @State private var showHelp = false
+
+    private var labels: [String] {
+        missing.map { $0 == "browserPolicy" ? "Browser protection" : ($0 == "categoryDNS" ? "Adult-content filter" : $0) }
+    }
+
+    var body: some View {
+        Button { showHelp.toggle() } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "shield.slash").font(.caption)
+                Text("\(labels.joined(separator: " and ")) \(labels.count == 1 ? "is" : "are") off")
+                    .font(.caption).fontWeight(.medium).lineLimit(1).minimumScaleFactor(0.8)
+                Spacer()
+                Image(systemName: "questionmark.circle").font(.caption)
+            }
+            .foregroundColor(.red)
+            .padding(.horizontal, FG.Spacing.m)
+            .padding(.vertical, FG.Spacing.s)
+            .background(Color.red.opacity(0.10))
+        }
+        .buttonStyle(.plain)
+        .popover(isPresented: $showHelp, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: FG.Spacing.s) {
+                if missing.contains("browserPolicy") {
+                    Text("Browser protection: run `bash Scripts/make-browser-profile.sh`, open the generated .local.mobileconfig and approve it in System Settings → General → Device Management. Then quit and reopen Brave.")
+                        .font(.caption).foregroundColor(.secondary).textSelection(.enabled)
+                }
+                if missing.contains("categoryDNS") {
+                    Text("Adult-content filter: open Resources/FocusGuard-Mac-DNS.mobileconfig and approve it in System Settings → General → Device Management.")
+                        .font(.caption).foregroundColor(.secondary).textSelection(.enabled)
+                }
+            }
+            .padding(FG.Spacing.m)
+            .frame(width: 300)
+        }
+    }
+}

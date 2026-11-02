@@ -19,6 +19,9 @@ final class DaemonClient: ObservableObject {
 
     let toasts = ToastCenter()
     var onStatusChange: ((BlockerStatus) -> Void)?
+    /// Called after every successful status read (for the notifier's reconcile).
+    var onInfoChange: ((StatusInfo) -> Void)?
+    private var refreshedDeadline: Date?
 
     private var pollTimer: Timer?
     private var lastStatus: BlockerStatus?
@@ -57,6 +60,8 @@ final class DaemonClient: ObservableObject {
     var unlocksToday: Int { info.unlocksToday }
     var maxUnlocksPerDay: Int { info.maxUnlocksPerDay }
     var unlockDelayMinutes: Int { max(1, info.unlockDelay / 60) }
+    var windowMinutes: Int { max(1, info.cooldownDuration / 60) }
+    var missingProtections: [String] { info.missingProtections ?? [] }
     var isEscalated: Bool { info.unlockDelay > FocusGuardConfig.defaultUnlockDelay }
 
     var sessionActive: Bool { info.status == .focusSession }
@@ -108,6 +113,13 @@ final class DaemonClient: ObservableObject {
         pendingAddApps.subtract(apps)
         pendingRemoveApps = pendingRemoveApps.intersection(apps)
         if new.status != old { onStatusChange?(new.status) }
+        onInfoChange?(new)
+        // When a countdown the user sees hits zero, ask the daemon to re-evaluate now
+        // rather than waiting for its next tick (once per deadline).
+        if let d = unlockDeadline ?? cooldownDeadline ?? sessionDeadline, Date() >= d, refreshedDeadline != d {
+            refreshedDeadline = d
+            refresh()
+        }
     }
 
     // MARK: - Commands

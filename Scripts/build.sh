@@ -4,6 +4,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 BUILD_DIR="$PROJECT_DIR/build"
+# SwiftPM cache outside the repo: the repo path contains a literal '*', and a cache
+# made under an earlier path name breaks with "PCH was compiled with module cache path".
+SCRATCH="${FG_SCRATCH:-$HOME/Library/Caches/FocusGuard-build}"
 
 echo "=== Building FocusGuard ==="
 
@@ -15,10 +18,10 @@ mkdir -p "$BUILD_DIR/daemon"
 
 # Build release binaries
 cd "$PROJECT_DIR"
-swift build -c release 2>&1
+swift build -c release --scratch-path "$SCRATCH" 2>&1
 
 # Copy menu bar app binary
-cp .build/release/FocusGuard "$BUILD_DIR/FocusGuard.app/Contents/MacOS/FocusGuard"
+cp "$SCRATCH/release/FocusGuard" "$BUILD_DIR/FocusGuard.app/Contents/MacOS/FocusGuard"
 
 # Copy app icon (Finder / About-window / Dock fallback)
 cp "$PROJECT_DIR/Resources/AppIcon.icns" "$BUILD_DIR/FocusGuard.app/Contents/Resources/AppIcon.icns"
@@ -38,9 +41,9 @@ cat > "$BUILD_DIR/FocusGuard.app/Contents/Info.plist" << 'PLIST'
     <key>CFBundleDisplayName</key>
     <string>FocusGuard</string>
     <key>CFBundleVersion</key>
-    <string>1.0.0</string>
+    <string>1.1.0</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0.0</string>
+    <string>1.1.0</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleIconFile</key>
@@ -53,23 +56,38 @@ cat > "$BUILD_DIR/FocusGuard.app/Contents/Info.plist" << 'PLIST'
     <true/>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>NSUserNotificationAlertStyle</key>
+    <string>alert</string>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.productivity</string>
 </dict>
 </plist>
 PLIST
 
-# Re-sign the bundle so the ad-hoc signature seals all bundled resources
-# (icon, plist, etc). Without this step, spctl reports "code has no resources
-# but signature indicates they must be present" and macOS can refuse to
-# render the NSStatusItem for the app.
-codesign --force --deep --sign - "$BUILD_DIR/FocusGuard.app"
-
-# Copy daemon binary
-cp .build/release/FocusGuardDaemon "$BUILD_DIR/daemon/focusguard-daemon"
+# Sign with a STABLE identity. Ad-hoc signatures change every build, so macOS
+# never keeps the notification permission (and other TCC grants) for the app:
+# the unlock alerts silently went nowhere. Order: $CODESIGN_IDENTITY, an
+# "Apple Development" cert, the catalog's self-signed cert, then ad-hoc + warning.
+IDENTITY="${CODESIGN_IDENTITY:-}"
+if [ -z "$IDENTITY" ]; then
+    IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null | sed -n 's/.*"\(Apple Development[^"]*\)".*/\1/p' | head -1)"
+fi
+if [ -z "$IDENTITY" ] && security find-identity -v -p codesigning 2>/dev/null | grep -q "CopyTranslate Self-Signed"; then
+    IDENTITY="CopyTranslate Self-Signed"
+fi
+cp "$SCRATCH/release/FocusGuardDaemon" "$BUILD_DIR/daemon/focusguard-daemon"
+if [ -n "$IDENTITY" ]; then
+    echo "Signing with: $IDENTITY"
+    codesign --force --deep --sign "$IDENTITY" "$BUILD_DIR/FocusGuard.app"
+    codesign --force --sign "$IDENTITY" "$BUILD_DIR/daemon/focusguard-daemon"
+else
+    echo "WARNING: no stable signing identity; signing ad-hoc (notification permission will not persist)"
+    codesign --force --deep --sign - "$BUILD_DIR/FocusGuard.app"
+fi
 
 # Copy resources
 cp "$PROJECT_DIR/Resources/com.focusguard.blocker.plist" "$BUILD_DIR/daemon/"
+cp "$PROJECT_DIR/Resources/com.focusguard.app.plist" "$BUILD_DIR/daemon/"
 cp "$PROJECT_DIR/Resources/default-blocked.txt" "$BUILD_DIR/daemon/"
 
 echo ""

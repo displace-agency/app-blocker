@@ -4,6 +4,7 @@ import FocusGuardShared
 
 struct RootView: View {
     @ObservedObject var daemon: DaemonClient
+    @ObservedObject var notifier: UnlockNotifier
     @State private var tab: Tab = .sites
     @FocusState private var addFieldFocused: Bool
 
@@ -31,6 +32,12 @@ struct RootView: View {
             header
             if daemon.isOffline || daemon.isDaemonOutdated {
                 OfflineBanner(outdated: daemon.isDaemonOutdated && !daemon.isOffline)
+            }
+            if notifier.permission == .denied {
+                NotificationsOffBanner()
+            }
+            if !daemon.missingProtections.isEmpty && !daemon.isOffline {
+                ProtectionMissingBanner(missing: daemon.missingProtections)
             }
             if daemon.browserProfileStale {
                 BrowserProfileBanner(domains: daemon.browserOnlyBlocked.sorted())

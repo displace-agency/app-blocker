@@ -159,6 +159,9 @@ public struct StatusInfo: Codable, Sendable {
     /// ExtraBlocklist is excluded so the private list never surfaces here. Optional for
     /// backward/forward Codable compatibility.
     public var browserOnlyBlocked: [String]?
+    /// v3: always-on protections the daemon found missing ("browserPolicy", "categoryDNS").
+    /// nil when everything is installed. Optional for Codable compatibility.
+    public var missingProtections: [String]?
 
     public init(
         status: BlockerStatus = .locked,
@@ -177,7 +180,8 @@ public struct StatusInfo: Codable, Sendable {
         schedules: [Schedule]? = nil,
         stats: StatsSummary? = nil,
         daemonVersion: Int? = nil,
-        browserOnlyBlocked: [String]? = nil
+        browserOnlyBlocked: [String]? = nil,
+        missingProtections: [String]? = nil
     ) {
         self.status = status
         self.blockedDomains = blockedDomains
@@ -196,6 +200,7 @@ public struct StatusInfo: Codable, Sendable {
         self.stats = stats
         self.daemonVersion = daemonVersion
         self.browserOnlyBlocked = browserOnlyBlocked
+        self.missingProtections = missingProtections
     }
 
     /// Seconds remaining until unlock takes effect

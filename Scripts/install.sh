@@ -79,11 +79,9 @@ else
     exit 1
 fi
 
-echo ""
-echo "Installing Chrome policy (disable Secure DNS)..."
-mkdir -p "/Library/Managed Preferences"
-defaults write "/Library/Managed Preferences/com.google.Chrome" DnsOverHttpsMode -string "off"
-echo "  Chrome Secure DNS disabled"
+# Browser policy (Brave Tor off, Brave/Chrome DoH off, URLBlocklist) comes from the
+# configuration profile built by Scripts/make-browser-profile.sh. A `defaults write`
+# to /Library/Managed Preferences is a silent no-op on modern macOS, so none here.
 
 echo ""
 echo "Installing menu bar app..."
@@ -93,12 +91,22 @@ cp -R "$BUILD_DIR/FocusGuard.app" /Applications/
 chown -R root:wheel /Applications/FocusGuard.app
 echo "  App installed to /Applications/FocusGuard.app"
 
+# Login agent: the menu-bar app starts at every login and relaunches if it quits,
+# so unlock notifications always have a sender.
+cp "$BUILD_DIR/daemon/com.focusguard.app.plist" /Library/LaunchAgents/com.focusguard.app.plist
+chown root:wheel /Library/LaunchAgents/com.focusguard.app.plist
+chmod 644 /Library/LaunchAgents/com.focusguard.app.plist
+CONSOLE_UID="$(stat -f%u /dev/console)"
+launchctl bootout "gui/$CONSOLE_UID/com.focusguard.app" 2>/dev/null || true
+launchctl bootstrap "gui/$CONSOLE_UID" /Library/LaunchAgents/com.focusguard.app.plist 2>/dev/null || true
+echo "  Menu bar app set to start at login"
+
 echo ""
 echo "================================================"
 echo "  FocusGuard is installed and ACTIVE!"
 echo "================================================"
 echo ""
-echo "  Menu bar app: Open from /Applications/FocusGuard.app"
+echo "  Menu bar app: starts at login (login agent com.focusguard.app)"
 echo "  Daemon: Running in background (survives reboots)"
 echo ""
 echo "  The menu bar icon (shield) appears in your menu bar."
@@ -109,11 +117,11 @@ echo "    1. sudo launchctl bootout system/com.focusguard.blocker"
 echo "    2. sudo rm /Library/LaunchDaemons/com.focusguard.blocker.plist"
 echo "    3. sudo rm /usr/local/bin/focusguard-daemon"
 echo "    4. sudo rm -rf /etc/focusguard"
-echo "    5. sudo rm -rf /Applications/FocusGuard.app"
-echo "    6. sudo sed -i '' '/FOCUSGUARD-START/,/FOCUSGUARD-END/d' /etc/hosts"
-echo "    7. sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder"
-echo "    8. sudo defaults delete '/Library/Managed Preferences/com.google.Chrome' DnsOverHttpsMode"
+echo "    5. sudo launchctl bootout gui/\$(id -u)/com.focusguard.app; sudo rm /Library/LaunchAgents/com.focusguard.app.plist"
+echo "    6. sudo rm -rf /Applications/FocusGuard.app"
+echo "    7. sudo sed -i '' '/FOCUSGUARD-START/,/FOCUSGUARD-END/d' /etc/hosts"
+echo "    8. sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder"
 echo ""
 
-# Open the app
-open /Applications/FocusGuard.app
+# The login agent already started the app; open it only if it is not running.
+pgrep -x FocusGuard >/dev/null || open /Applications/FocusGuard.app

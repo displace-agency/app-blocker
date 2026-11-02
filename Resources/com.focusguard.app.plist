@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Login agent for the FocusGuard menu-bar app: starts at every login and is
+     relaunched if it quits or crashes, so unlock alerts always have a sender.
+     Installed root-owned in /Library/LaunchAgents by install.sh / update.command. -->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.focusguard.app</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Applications/FocusGuard.app/Contents/MacOS/FocusGuard</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+    <key>LimitLoadToSessionType</key>
+    <string>Aqua</string>
+    <key>ProcessType</key>
+    <string>Interactive</string>
+</dict>
+</plist>

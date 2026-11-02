@@ -30,8 +30,13 @@ final class Daemon {
     private var enforceTimer: DispatchSourceTimer?
     private var appTimer: DispatchSourceTimer?
     private let cachedBootId: String
-    private var browserPolicyLogged = false
-    private var dnsProfileLogged = false
+    private var deadlineTimer: DispatchSourceTimer?
+    /// Last known presence of the always-on profiles (nil = not checked / not applicable).
+    private var browserPolicyActive: Bool?
+    private var dnsProfileActive: Bool?
+    private var dnsCheckRunning = false
+    private var lastDnsCheck = Date.distantPast
+    private static let dnsCheckInterval: TimeInterval = 600
 
     init() {
         self.config = ConfigSchema.parse(data: FileManager.default.contents(atPath: FocusGuardConfig.configFile))
@@ -48,8 +53,8 @@ final class Daemon {
         ensureConfigDir()
         unlink(FocusGuardConfig.legacyCommandFile) // retire the old world-writable IPC file
         migrateConfigIfNeeded()
-        verifyBrowserPolicy(verbose: true)
-        verifyDnsProfile(verbose: true)
+        verifyBrowserPolicy()
+        verifyDnsProfile(force: true)
 
         socketServer = SocketServer(
             path: FocusGuardConfig.socketPath,
@@ -65,8 +70,8 @@ final class Daemon {
         et.schedule(deadline: .now() + 30, repeating: 30)
         et.setEventHandler { [weak self] in
             _ = self?.enforce()
-            self?.verifyBrowserPolicy() // verify profile presence, silent
-            self?.verifyDnsProfile()    // verify category-DNS profile presence, silent
+            self?.verifyBrowserPolicy() // cheap file check; logs only on change
+            self?.verifyDnsProfile()    // `profiles show` off-queue, every 10 min
         }
         et.resume()
         enforceTimer = et
@@ -123,37 +128,44 @@ final class Daemon {
         var status: BlockerStatus = .locked
         var shouldBlock = true
         var activeCooldownEnd: Date?
+        var effectiveRequestTime: Date?
+        var pendingDeadline: Date?
 
         if sessionActive {
             status = .focusSession
             shouldBlock = true
         } else {
-            let unlockTime = readUnlockRequestTime()
-            let cooldownEnd = readCooldownEnd()
+            let unlockStamp = readUnlockStamp()
+            let cooldownStamp = readCooldownStamp()
             let todayCount = currentUnlocksToday(now: now, nowMono: nowMono, today: today)
             let effectiveDelay = EscalationMath.currentDelay(base: config.unlockDelay, unlocksToday: todayCount)
+            let wallNow = now.timeIntervalSince1970
 
-            if let endTime = cooldownEnd {
-                if now >= endTime {
+            if let endStamp = cooldownStamp {
+                if UnlockClock.windowExpired(end: endStamp, nowWall: wallNow, bootId: cachedBootId, nowMonotonic: nowMono) {
                     log("Cooldown expired, auto-relocking")
                     deleteFile(unlockFile); deleteFile(cooldownFile)
                     status = .locked; shouldBlock = true
                 } else {
                     status = .unlocked; shouldBlock = false
-                    activeCooldownEnd = endTime
+                    activeCooldownEnd = Date(timeIntervalSince1970: UnlockClock.displayEnd(end: endStamp, nowWall: wallNow, bootId: cachedBootId, nowMonotonic: nowMono))
                 }
-            } else if let requestTime = unlockTime {
-                let elapsed = now.timeIntervalSince(requestTime)
+            } else if let request = unlockStamp {
+                let elapsed = UnlockClock.elapsed(since: request, nowWall: wallNow, bootId: cachedBootId, nowMonotonic: nowMono)
                 if elapsed >= Double(effectiveDelay) {
                     status = .unlocked; shouldBlock = false
-                    let end = now.addingTimeInterval(Double(config.cooldownDuration))
-                    writeCooldownEnd(end)
-                    activeCooldownEnd = end
+                    let opened = ClockStamp(wall: wallNow, bootId: cachedBootId, monotonic: nowMono)
+                    let endStamp = UnlockClock.windowEnd(opened: opened, durationSeconds: config.cooldownDuration)
+                    writeCooldownStamp(endStamp)
+                    activeCooldownEnd = Date(timeIntervalSince1970: endStamp.wall)
                     recordUnlock(now: now, nowMono: nowMono, today: today)
                     stats.recordCompletedUnlock(today: today)
                     log("Unlock delay elapsed - entering \(config.cooldownDuration)s window")
                 } else {
                     status = .unlockPending; shouldBlock = true
+                    // Request time as the clocks we trust see it, so the app's countdown is honest.
+                    effectiveRequestTime = now.addingTimeInterval(-max(0, elapsed))
+                    pendingDeadline = now.addingTimeInterval(Double(effectiveDelay) - max(0, elapsed))
                 }
             } else {
                 // Baseline: always-on unless schedules exist and we're outside a window.
@@ -187,7 +199,7 @@ final class Daemon {
         let info = StatusInfo(
             status: status,
             blockedDomains: userDomains,
-            unlockRequestTime: readUnlockRequestTime(),
+            unlockRequestTime: status == .unlockPending ? effectiveRequestTime : nil,
             unlockDelay: EscalationMath.currentDelay(base: config.unlockDelay, unlocksToday: finalCount),
             lastEnforced: now,
             unlocksToday: finalCount,
@@ -201,9 +213,11 @@ final class Daemon {
             schedules: config.schedules,
             stats: stats.summary(today: today),
             daemonVersion: FocusGuardConfig.daemonProtocolVersion,
-            browserOnlyBlocked: browserOnly.isEmpty ? nil : browserOnly
+            browserOnlyBlocked: browserOnly.isEmpty ? nil : browserOnly,
+            missingProtections: missingProtections()
         )
         writeStatus(info)
+        scheduleDeadlineTimer(pendingDeadline ?? activeCooldownEnd ?? sessionEnd)
         syncToCloud(domains: userDomains, locked: shouldBlock, cooldownEnd: activeCooldownEnd)
         return info
     }
@@ -261,6 +275,9 @@ final class Daemon {
             return ok()
         case .unlock:
             if sessionActive { return fail(.sessionActive) }
+            // Only from the locked state: a second request must not restart the delay,
+            // and a request inside an open window must not leave a stray unlock file.
+            guard current.status == .locked else { return fail(.invalidArgument) }
             let today = Daemon.todayString()
             let count = currentUnlocksToday(now: Date(), nowMono: Daemon.monotonicNanos(), today: today)
             if count >= config.maxUnlocksPerDay {
@@ -291,7 +308,7 @@ final class Daemon {
             }
             return added > 0 ? ok() : fail(.invalidDomain)
         case .removeDomain, .removeDomains:
-            guard current.status == .unlocked else { return fail(.lockedState) }
+            guard earnedUnlock(current) else { return fail(.lockedState) }
             if sessionActive { return fail(.sessionActive) }
             guard let arg = msg.argument else { return fail(.invalidArgument) }
             let list = arg.components(separatedBy: "\n").map { DomainValidation.normalize($0) }.filter { !$0.isEmpty }
@@ -304,7 +321,7 @@ final class Daemon {
             addLine(name, to: appBlockedFile)
             return ok()
         case .removeApp:
-            guard current.status == .unlocked else { return fail(.lockedState) }
+            guard earnedUnlock(current) else { return fail(.lockedState) }
             if sessionActive { return fail(.sessionActive) }
             guard let arg = msg.argument else { return fail(.invalidArgument) }
             removeLines([AppMatchRules.normalize(arg)], from: appBlockedFile)
@@ -316,7 +333,7 @@ final class Daemon {
             mutateSchedules { $0.removeAll { $0.id == sched.id }; $0.append(sched) }
             return ok()
         case .removeSchedule:
-            guard current.status == .unlocked else { return fail(.lockedState) }
+            guard earnedUnlock(current) else { return fail(.lockedState) }
             guard let id = msg.argument else { return fail(.invalidArgument) }
             mutateSchedules { $0.removeAll { $0.id == id } }
             return ok()
@@ -438,28 +455,48 @@ final class Daemon {
 
     // MARK: - Unlock files / history
 
-    private func readUnlockRequestTime() -> Date? {
-        guard let data = FileManager.default.contents(atPath: unlockFile),
-              let ts = try? JSONDecoder().decode(Double.self, from: data) else { return nil }
-        return Date(timeIntervalSince1970: ts)
+    private func readUnlockStamp() -> ClockStamp? {
+        guard let data = FileManager.default.contents(atPath: unlockFile) else { return nil }
+        return ClockStamp.decode(data)
     }
 
     private func writeUnlockFile() {
-        if let data = try? JSONEncoder().encode(Date().timeIntervalSince1970) {
+        let stamp = ClockStamp(wall: Date().timeIntervalSince1970, bootId: cachedBootId, monotonic: Daemon.monotonicNanos())
+        if let data = try? JSONEncoder().encode(stamp) {
             AtomicFile.write(data, to: unlockFile, mode: 0o644, owner: 0, group: 0)
         }
     }
 
-    private func readCooldownEnd() -> Date? {
-        guard let data = FileManager.default.contents(atPath: cooldownFile),
-              let ts = try? JSONDecoder().decode(Double.self, from: data) else { return nil }
-        return Date(timeIntervalSince1970: ts)
+    private func readCooldownStamp() -> ClockStamp? {
+        guard let data = FileManager.default.contents(atPath: cooldownFile) else { return nil }
+        return ClockStamp.decode(data)
     }
 
-    private func writeCooldownEnd(_ date: Date) {
-        if let data = try? JSONEncoder().encode(date.timeIntervalSince1970) {
+    private func writeCooldownStamp(_ stamp: ClockStamp) {
+        if let data = try? JSONEncoder().encode(stamp) {
             AtomicFile.write(data, to: cooldownFile, mode: 0o644, owner: 0, group: 0)
         }
+    }
+
+    /// Removals need an unlock the user actually waited for, not just "unlocked"
+    /// (outside a schedule window the baseline is unlocked with no delay served).
+    private func earnedUnlock(_ info: StatusInfo) -> Bool {
+        info.status == .unlocked && info.cooldownEndTime != nil
+    }
+
+    /// Re-evaluates exactly when the next deadline passes, so unlock and relock
+    /// happen on time instead of up to 30 s late. The 30 s tick re-arms it.
+    private func scheduleDeadlineTimer(_ deadline: Date?) {
+        deadlineTimer?.cancel()
+        deadlineTimer = nil
+        guard let deadline else { return }
+        let delay = deadline.timeIntervalSinceNow + 0.5
+        guard delay > 0, delay <= 31 else { return }
+        let t = DispatchSource.makeTimerSource(queue: stateQueue)
+        t.schedule(deadline: .now() + delay)
+        t.setEventHandler { [weak self] in _ = self?.enforce() }
+        t.resume()
+        deadlineTimer = t
     }
 
     private struct UnlockHistory: Codable { var entries: [UnlockRecord] }
@@ -515,16 +552,24 @@ final class Daemon {
     /// list in every Brave window INCLUDING Tor windows (enforced pre-network), so
     /// Brave's Tor feature stays usable. Build/refresh the populated profile with
     /// Scripts/make-browser-profile.sh, then install it.
-    private func verifyBrowserPolicy(verbose: Bool = false) {
-        guard config.blockTor else { return }
+    private func verifyBrowserPolicy() {
+        guard config.blockTor else { browserPolicyActive = nil; return }
         let bravePolicyPlist = "\(FocusGuardConfig.chromePrefsDir)/\(FocusGuardConfig.bravePlistName).plist"
         let installed = FileManager.default.fileExists(atPath: bravePolicyPlist)
-        if verbose || !browserPolicyLogged {
+        if installed != browserPolicyActive {
             log(installed
                 ? "Browser policy profile active (URLBlocklist + DoH off)"
                 : "Browser policy profile NOT installed -- blocklist not enforced in Brave Tor windows (run Scripts/make-browser-profile.sh and install it)")
-            browserPolicyLogged = true
+            browserPolicyActive = installed
         }
+    }
+
+    /// Always-on protections currently missing, for the app's warning banner.
+    private func missingProtections() -> [String]? {
+        var missing: [String] = []
+        if browserPolicyActive == false { missing.append("browserPolicy") }
+        if dnsProfileActive == false { missing.append("categoryDNS") }
+        return missing.isEmpty ? nil : missing
     }
 
     /// The URLBlocklist macOS materialised from the installed browser policy profile
@@ -554,19 +599,27 @@ final class Daemon {
     /// user approval -- so we check that the Families resolver is actually the active system
     /// DNS via `scutil --dns`. Gated on extraBlocking (same adult-blocking intent). Log-only
     /// nudge; it never weakens anything.
-    private func verifyDnsProfile(verbose: Bool = false) {
-        guard config.extraBlocking else { return }
-        // The daemon is root, so it enumerates installed configuration profiles and matches ours
-        // by identifier. NOTE: `scutil --dns` does NOT surface a profile-delivered DoH resolver
-        // and `dig` bypasses it, so neither can detect this -- only the installed-profile list
-        // reflects it. `profiles show` prints a line `profileIdentifier: com.focusguard.macdns`.
-        let installed = runShellOutput("/usr/bin/profiles show 2>/dev/null")
-        let active = installed.contains(FocusGuardConfig.dnsProfileIdentifier)
-        if verbose || !dnsProfileLogged {
-            log(active
-                ? "Category-DNS profile active (Cloudflare Families: adult + malware, system-wide)"
-                : "Category-DNS profile NOT active -- adult category not blocked system-wide (install Resources/FocusGuard-Mac-DNS.mobileconfig)")
-            dnsProfileLogged = true
+    private func verifyDnsProfile(force: Bool = false) {
+        guard config.extraBlocking else { dnsProfileActive = nil; return }
+        guard !dnsCheckRunning, force || Date().timeIntervalSince(lastDnsCheck) >= Daemon.dnsCheckInterval else { return }
+        dnsCheckRunning = true
+        lastDnsCheck = Date()
+        // The daemon is root, so it lists installed configuration profiles and matches ours by
+        // identifier (`scutil --dns` and `dig` cannot see a profile-delivered DoH resolver).
+        // `profiles show` can take seconds; run it off the state queue so socket
+        // commands never wait on it (they time out client-side after 6 s).
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            guard let self else { return }
+            let active = self.runShellOutput("/usr/bin/profiles show 2>/dev/null").contains(FocusGuardConfig.dnsProfileIdentifier)
+            self.stateQueue.async {
+                self.dnsCheckRunning = false
+                if active != self.dnsProfileActive {
+                    self.log(active
+                        ? "Category-DNS profile active (Cloudflare Families: adult + malware, system-wide)"
+                        : "Category-DNS profile NOT active -- adult category not blocked system-wide (install Resources/FocusGuard-Mac-DNS.mobileconfig)")
+                    self.dnsProfileActive = active
+                }
+            }
         }
     }
 

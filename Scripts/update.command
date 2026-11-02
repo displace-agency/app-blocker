@@ -1,5 +1,5 @@
 #!/bin/bash
-# Double-click this file to update FocusGuard
+# Double-click this file to update FocusGuard (app + daemon + login agent).
 
 clear
 echo "================================"
@@ -10,14 +10,16 @@ echo ""
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD_DIR="$PROJECT_DIR/build"
 
-if [ ! -f "$BUILD_DIR/daemon/focusguard-daemon" ] || [ ! -d "$BUILD_DIR/FocusGuard.app" ]; then
-    echo "ERROR: Build not found. Run build.sh first."
+if [ ! -f "$BUILD_DIR/daemon/focusguard-daemon" ] || [ ! -d "$BUILD_DIR/FocusGuard.app" ] || [ ! -f "$BUILD_DIR/daemon/com.focusguard.app.plist" ]; then
+    echo "ERROR: Build not found or outdated. Run Scripts/build.sh first."
     echo "Press any key to close..."
     read -n 1
     exit 1
 fi
 
 echo "This will update FocusGuard (app + daemon)."
+echo "Blocking stays on: the old daemon keeps running until the new one is ready,"
+echo "and any failure restarts it."
 echo "You'll be asked for your Mac password."
 echo ""
 
@@ -25,76 +27,78 @@ TMPSCRIPT=$(mktemp /tmp/focusguard-update.XXXXXX.sh)
 cat > "$TMPSCRIPT" << ENDSCRIPT
 #!/bin/bash
 set -e
+DAEMON_PLIST=/Library/LaunchDaemons/com.focusguard.blocker.plist
+AGENT_PLIST=/Library/LaunchAgents/com.focusguard.app.plist
+CONSOLE_UID="\$(stat -f%u /dev/console)"
 
-# Step 1: Remove ALL immutable flags first
+# If anything fails from here on, bring the blocker (and the app) back up.
+recover() {
+    echo "Update step failed -- restarting FocusGuard with what is installed."
+    launchctl bootstrap system "\$DAEMON_PLIST" 2>/dev/null || true
+    [ -f "\$AGENT_PLIST" ] && launchctl bootstrap "gui/\$CONSOLE_UID" "\$AGENT_PLIST" 2>/dev/null || true
+}
+trap recover ERR
+
+# Step 1: Stage the new build next to the old one (nothing is stopped yet)
 chflags -R noschg /Applications/FocusGuard.app 2>/dev/null || true
-chflags -R noschg /usr/local/bin/focusguard-daemon 2>/dev/null || true
-chflags -R noschg /Library/LaunchDaemons/com.focusguard.blocker.plist 2>/dev/null || true
-chflags -R noschg /etc/focusguard 2>/dev/null || true
-chflags noschg /etc/hosts 2>/dev/null || true
+chflags noschg /usr/local/bin/focusguard-daemon "\$DAEMON_PLIST" 2>/dev/null || true
+rm -rf /Applications/FocusGuard.app.new /usr/local/bin/focusguard-daemon.new
+cp "$BUILD_DIR/daemon/focusguard-daemon" /usr/local/bin/focusguard-daemon.new
+chmod 755 /usr/local/bin/focusguard-daemon.new
+cp -R "$BUILD_DIR/FocusGuard.app" /Applications/FocusGuard.app.new
 
-# Step 2: Stop running instances
-killall FocusGuard 2>/dev/null || true
-launchctl bootout system/com.focusguard.blocker 2>/dev/null || true
-sleep 1
-
-# Step 3: Update daemon binary
-cp "$BUILD_DIR/daemon/focusguard-daemon" /usr/local/bin/focusguard-daemon
-chmod 755 /usr/local/bin/focusguard-daemon
-
-# Step 4: Update app
-rm -rf /Applications/FocusGuard.app
-cp -R "$BUILD_DIR/FocusGuard.app" /Applications/
-
-# Step 5: Ensure config + data files exist (daemon migrates config fields itself)
+# Step 2: Ensure config + data files exist (daemon migrates config fields itself)
 mkdir -p /etc/focusguard
-if [ ! -f /etc/focusguard/blocked.txt ]; then
-    cp "$BUILD_DIR/daemon/default-blocked.txt" /etc/focusguard/blocked.txt
-fi
-if [ ! -f /etc/focusguard/appBlocked.txt ]; then
-    : > /etc/focusguard/appBlocked.txt
-fi
+[ -f /etc/focusguard/blocked.txt ] || cp "$BUILD_DIR/daemon/default-blocked.txt" /etc/focusguard/blocked.txt
+[ -f /etc/focusguard/appBlocked.txt ] || : > /etc/focusguard/appBlocked.txt
 if [ ! -f /etc/focusguard/config.json ]; then
     echo '{"version":2,"unlockDelay":1200,"maxUnlocksPerDay":2,"cooldownDuration":900,"appCheckInterval":10,"schedules":[]}' > /etc/focusguard/config.json
 fi
-
-# Trim an oversized legacy log so it does not linger forever
 if [ -f /var/log/focusguard.log ] && [ "\$(stat -f%z /var/log/focusguard.log 2>/dev/null || echo 0)" -gt 5242880 ]; then
     : > /var/log/focusguard.log
 fi
 
-# Step 6: Install plist
-cp "$BUILD_DIR/daemon/com.focusguard.blocker.plist" /Library/LaunchDaemons/
-chown root:wheel /Library/LaunchDaemons/com.focusguard.blocker.plist
-chmod 644 /Library/LaunchDaemons/com.focusguard.blocker.plist
-
-# Step 7: Browser policy (Brave Tor + Chrome/Brave DoH off) is delivered via the
-# FocusGuard-Browser-Policy.mobileconfig configuration profile, NOT here -- modern
-# macOS ignores defaults writes to /Library/Managed Preferences.
-
-# Step 8: Start daemon via launchd (no unmanaged direct-launch fallback -- a
-# detached process would fight launchd's KeepAlive).
+# Step 3: Stop the app agent and the daemon (one bootout each)
+launchctl bootout "gui/\$CONSOLE_UID/com.focusguard.app" 2>/dev/null || true
+killall FocusGuard 2>/dev/null || true
 launchctl bootout system/com.focusguard.blocker 2>/dev/null || true
-BOOTSTRAP_OUT="\$(launchctl bootstrap system /Library/LaunchDaemons/com.focusguard.blocker.plist 2>&1)"
-if [ -n "\$BOOTSTRAP_OUT" ]; then
-    echo "launchctl bootstrap: \$BOOTSTRAP_OUT"
-fi
+sleep 1
 
-# Verify the daemon is actually running under launchd (retry up to 10s)
+# Step 4: Swap in the staged files
+mv -f /usr/local/bin/focusguard-daemon.new /usr/local/bin/focusguard-daemon
+rm -rf /Applications/FocusGuard.app
+mv /Applications/FocusGuard.app.new /Applications/FocusGuard.app
+
+# Step 5: Install launchd plists (daemon + login agent for the menu-bar app)
+cp "$BUILD_DIR/daemon/com.focusguard.blocker.plist" "\$DAEMON_PLIST"
+chown root:wheel "\$DAEMON_PLIST"; chmod 644 "\$DAEMON_PLIST"
+cp "$BUILD_DIR/daemon/com.focusguard.app.plist" "\$AGENT_PLIST"
+chown root:wheel "\$AGENT_PLIST"; chmod 644 "\$AGENT_PLIST"
+
+# Browser policy (Brave Tor + DoH off) is a configuration profile, not set here.
+
+# Step 6: Start the daemon and verify it runs
+BOOTSTRAP_OUT="\$(launchctl bootstrap system "\$DAEMON_PLIST" 2>&1)" || true
+[ -n "\$BOOTSTRAP_OUT" ] && echo "launchctl bootstrap: \$BOOTSTRAP_OUT"
 RUNNING=0
 for i in 1 2 3 4 5 6 7 8 9 10; do
-    if launchctl print system/com.focusguard.blocker 2>/dev/null | grep -q "state = running"; then
-        RUNNING=1
-        break
-    fi
+    if launchctl print system/com.focusguard.blocker 2>/dev/null | grep -q "state = running"; then RUNNING=1; break; fi
     sleep 1
 done
-if [ "\$RUNNING" -eq 1 ]; then
-    echo "Daemon is running."
-else
+if [ "\$RUNNING" -ne 1 ]; then
     echo "ERROR: Daemon failed to reach running state. Check /var/log/focusguard.launchd.log"
+    recover
     exit 1
 fi
+echo "Daemon is running."
+
+# Step 7: Start the menu-bar app as a login agent (runs at every login, relaunches if it quits)
+launchctl bootstrap "gui/\$CONSOLE_UID" "\$AGENT_PLIST" 2>/dev/null || launchctl kickstart -k "gui/\$CONSOLE_UID/com.focusguard.app" 2>/dev/null || true
+for i in 1 2 3 4 5; do
+    if launchctl print "gui/\$CONSOLE_UID/com.focusguard.app" 2>/dev/null | grep -q "state = running"; then echo "App is running (login agent)."; break; fi
+    sleep 1
+done
+trap - ERR
 ENDSCRIPT
 
 chmod +x "$TMPSCRIPT"
@@ -107,8 +111,8 @@ rm -f "$TMPSCRIPT"
 if [ $RESULT -eq 0 ]; then
     echo ""
     echo "FocusGuard updated successfully!"
-    echo "Starting app..."
-    open /Applications/FocusGuard.app
+    pgrep -x FocusGuard >/dev/null || open /Applications/FocusGuard.app
+    echo "If macOS asks whether FocusGuard may send notifications, click Allow."
     echo ""
     echo "Done! You can close this window."
 else

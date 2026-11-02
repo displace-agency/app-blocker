@@ -27,13 +27,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
     private var statusItem: NSStatusItem!
     private var popover: NSPopover!
     private let daemon = DaemonClient()
+    private let notifier = UnlockNotifier()
     private var onboardingWindow: NSWindow?
     private var unlockWindow: NSWindow?
     private var iphoneSetupWindow: NSWindow?
     private var lastStatus: BlockerStatus?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        requestNotificationPermission()
+        notifier.requestPermission()
+        notifier.onOpen = { [weak self] in self?.showPopover() }
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = statusItem.button {
@@ -47,18 +49,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         popover.contentSize = FG.Layout.popover
         popover.behavior = .transient
         popover.delegate = self
-        popover.contentViewController = NSHostingController(rootView: RootView(daemon: daemon))
+        popover.contentViewController = NSHostingController(rootView: RootView(daemon: daemon, notifier: notifier))
 
         daemon.onStatusChange = { [weak self] status in
             DispatchQueue.main.async {
                 guard let self else { return }
                 let previous = self.lastStatus
                 self.lastStatus = status
+                _ = previous
                 self.updateIcon(for: status)
-                if previous == .unlockPending && status == .unlocked {
-                    self.postUnlockReadyNotification()
-                }
             }
+        }
+        daemon.onInfoChange = { [weak self] info in
+            guard let self else { return }
+            self.notifier.reconcile(info, unlockDeadline: self.daemon.unlockDeadline)
         }
 
         NotificationCenter.default.addObserver(self, selector: #selector(showUnlockWindow), name: .focusGuardShowUnlock, object: nil)
@@ -83,15 +87,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
     private func showContextMenu() {
         let menu = NSMenu()
         menu.addItem(withTitle: L10n.Action.replayIntro, action: #selector(replayOnboarding), keyEquivalent: "")
-        menu.addItem(.separator())
-        menu.addItem(withTitle: L10n.Action.quit, action: #selector(quit), keyEquivalent: "q")
+        menu.addItem(withTitle: "Notification Settings…", action: #selector(openNotificationSettings), keyEquivalent: "")
+        // No Quit: FocusGuard runs as a login agent (KeepAlive) so unlock alerts always arrive.
         menu.items.forEach { $0.target = self }
         statusItem.menu = menu
         statusItem.button?.performClick(nil)
         statusItem.menu = nil // reset so left-click opens the popover again
     }
 
-    @objc private func quit() { NSApplication.shared.terminate(nil) }
+    @objc private func openNotificationSettings() { UnlockNotifier.openSystemSettings() }
+
+    private func showPopover() {
+        guard let button = statusItem.button, !popover.isShown else { return }
+        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        NSApp.activate(ignoringOtherApps: true)
+    }
 
     @objc private func replayOnboarding() {
         UserDefaults.standard.set(false, forKey: "hasCompletedOnboarding")
@@ -103,6 +113,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         if popover.isShown {
             popover.performClose(nil)
         } else {
+            notifier.refreshPermission()
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             NSApp.activate(ignoringOtherApps: true)
         }
@@ -128,6 +139,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         unlockWindow?.close()
         let view = UnlockConfirmationView(
             delayMinutes: daemon.unlockDelayMinutes,
+            windowMinutes: daemon.windowMinutes,
             onConfirm: { [weak self] in self?.daemon.requestUnlock() },
             onDismiss: { [weak self] in self?.unlockWindow?.close(); self?.unlockWindow = nil }
         )
@@ -184,20 +196,5 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         image.isTemplate = false
         image.accessibilityDescription = "FocusGuard: \(style.label)"
         return image
-    }
-
-    // MARK: - Notifications
-
-    private func requestNotificationPermission() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
-    }
-
-    private func postUnlockReadyNotification() {
-        let content = UNMutableNotificationContent()
-        content.title = L10n.appName
-        content.body = "Blocks are lifted. You have a short window before auto-relock."
-        content.sound = .default
-        let request = UNNotificationRequest(identifier: "focusguard.unlock.ready", content: content, trigger: nil)
-        UNUserNotificationCenter.current().add(request)
     }
 }
