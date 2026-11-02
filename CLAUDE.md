@@ -51,6 +51,27 @@ unlike the user blocklist, are NOT freed by an unlock:
   Families too, so iPhone inherits it. Endpoint is public (no secret). The daemon's
   `verifyDnsProfile()` confirms it is installed via `profiles show`.
 
+### Adding a domain is only half the block
+
+`blocked.txt` + `/etc/hosts` are **not** enough on their own. Brave and Chrome resolve
+through their own DoH, which never consults `/etc/hosts`, so a domain can be correctly
+listed in both files and still load normally in the browser. Only the browser policy
+profile (`DnsOverHttpsMode` off + `URLBlocklist`) closes that path.
+
+The profile is a **snapshot taken at generation time** — it does not track later edits
+to `blocked.txt`. So after adding domains:
+
+1. `bash Scripts/make-browser-profile.sh` (regenerates the populated local profile)
+2. open the generated `.local.mobileconfig`, approve in System Settings → General →
+   Device Management
+3. fully quit and reopen Brave — it caches DNS, so a running browser keeps resolving
+
+When debugging "X is not blocked", check the daemon log FIRST: it warns
+`Browser policy profile NOT installed` and `Category-DNS profile NOT active` on every
+start, and those warnings sat unread for weeks while the hosts entries looked correct
+(2026-08-08, youtube.com). A block present in `/etc/hosts` proves the daemon worked, not
+that the site is unreachable.
+
 ### Privacy: ExtraBlocklist stays EMPTY in the repo
 
 This repo is **public**. `ExtraBlocklist.swift` is committed **empty**; any populated
