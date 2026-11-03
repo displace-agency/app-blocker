@@ -1,7 +1,11 @@
 #!/bin/bash
 #
 # Generate the LOCAL browser policy profile with URLBlocklist populated from
-# ExtraBlocklist.swift PLUS the user blocklist (/etc/focusguard/blocked.txt).
+# ExtraBlocklist.swift (the always-on list). The user blocklist is NOT included by
+# default (2026-11-03): with Tor disabled and DoH off, /etc/hosts already covers every
+# Brave/Chrome window, and a user domain inside URLBlocklist stays blocked even during
+# an earned unlock (the profile has no unlock concept). Pass --include-user-list to add
+# /etc/focusguard/blocked.txt anyway (stricter: those sites never unlock in the browser).
 #
 # Brave's Tor feature is DISABLED here (TorDisabled=true): Tor windows resolve DNS at the
 # exit node, bypassing the system Families filter + /etc/hosts entirely, so they were a
@@ -15,7 +19,8 @@
 # EMPTY (public template). The file generated below is gitignored and never pushed.
 #
 # Usage:
-#   bash Scripts/make-browser-profile.sh
+#   bash Scripts/make-browser-profile.sh                       # always-on list only (default)
+#   bash Scripts/make-browser-profile.sh --include-user-list   # also blocked.txt, never unlocks
 #   open Resources/FocusGuard-Browser-Policy.local.mobileconfig   # then approve in System Settings
 #
 set -euo pipefail
@@ -29,7 +34,10 @@ OUT="$DIR/Resources/FocusGuard-Browser-Policy.local.mobileconfig"
 extra="$(grep -oE '"[a-z0-9][a-z0-9.-]*\.[a-z]{2,}"' "$SRC" | tr -d '"' || true)"
 # ... plus the user blocklist the daemon enforces in /etc/hosts (YouTube, X, etc.), so
 # the same sites are blocked inside Brave Tor windows too.
-user="$(grep -vE '^[[:space:]]*(#|$)' "$USERLIST" 2>/dev/null | sed 's/[[:space:]]//g' | tr 'A-Z' 'a-z' || true)"
+user=""
+if [ "${1:-}" = "--include-user-list" ]; then
+  user="$(grep -vE '^[[:space:]]*(#|$)' "$USERLIST" 2>/dev/null | sed 's/[[:space:]]//g' | tr 'A-Z' 'a-z' || true)"
+fi
 domains="$(printf '%s\n%s\n' "$extra" "$user" | grep -E '^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$' | sort -u || true)"
 count="$(printf '%s\n' "$domains" | grep -c . || true)"
 if [ "${count:-0}" -eq 0 ]; then
