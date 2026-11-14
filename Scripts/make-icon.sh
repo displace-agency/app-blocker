@@ -1,11 +1,16 @@
 #!/bin/bash
-# Build Resources/AppIcon.icns from a 1024x1024 master PNG.
+# Build Resources/AppIcon.icns. With no argument the 1024x1024 master is drawn first by
+# Scripts/icon/make-icon.swift (CoreGraphics, source art in Resources/brand/focusguard-icon.svg).
 # Usage: bash Scripts/make-icon.sh [path-to-master.png]
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 MASTER="${1:-$PROJECT_DIR/Resources/icon-master-1024.png}"
+
+if [ $# -eq 0 ]; then
+    swift "$SCRIPT_DIR/icon/make-icon.swift" "$MASTER"
+fi
 
 if [ ! -f "$MASTER" ]; then
     echo "Master icon not found: $MASTER"
