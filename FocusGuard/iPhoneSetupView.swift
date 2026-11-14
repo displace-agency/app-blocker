@@ -1,3 +1,5 @@
+// Owner-only: hardcodes a private worker URL. Excluded from the public release (PUBLIC_BUILD).
+#if !PUBLIC_BUILD
 import SwiftUI
 import FocusGuardShared
 
@@ -390,3 +392,4 @@ struct ScreenTimeSetupView: View {
         try? passcode.write(toFile: "/etc/focusguard/.screentime_passcode", atomically: true, encoding: .utf8)
     }
 }
+#endif

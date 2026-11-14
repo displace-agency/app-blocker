@@ -69,7 +69,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         }
 
         NotificationCenter.default.addObserver(self, selector: #selector(showUnlockWindow), name: .focusGuardShowUnlock, object: nil)
+        #if !PUBLIC_BUILD
         NotificationCenter.default.addObserver(self, selector: #selector(showIPhoneSetupWindow), name: .focusGuardShowiPhoneSetup, object: nil)
+        #endif
 
         if !UserDefaults.standard.bool(forKey: "hasCompletedOnboarding") {
             showOnboarding()
@@ -152,6 +154,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    #if !PUBLIC_BUILD
     @objc private func showIPhoneSetupWindow() {
         popover.performClose(nil)
         iphoneSetupWindow?.close()
@@ -161,6 +164,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
+    #endif
 
     func windowWillClose(_ notification: Notification) {
         guard let window = notification.object as? NSWindow else { return }

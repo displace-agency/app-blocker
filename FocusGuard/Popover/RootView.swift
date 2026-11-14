@@ -44,9 +44,12 @@ struct RootView: View {
             if notifier.permission == .denied {
                 NotificationsOffBanner()
             }
+            #if !PUBLIC_BUILD
+            // Owner-only: the profiles are extras the public installer does not ship.
             if !daemon.missingProtections.isEmpty && !daemon.isOffline {
                 ProtectionMissingBanner(missing: daemon.missingProtections)
             }
+            #endif
             if daemon.browserProfileStale {
                 BrowserProfileBanner(domains: daemon.browserOnlyBlocked.sorted())
             }
@@ -211,6 +214,7 @@ struct RootView: View {
 
     private var footer: some View {
         HStack(spacing: FG.Spacing.s) {
+            #if !PUBLIC_BUILD
             Image(systemName: "iphone").font(.caption2).foregroundColor(hasPasscode ? FG.Palette.emerald : .secondary)
             if hasPasscode, daemon.status == .unlocked, let code = screenTimePasscode {
                 Button {
@@ -226,6 +230,7 @@ struct RootView: View {
                         .font(.caption2).buttonStyle(.borderedProminent).tint(FG.Palette.emerald).controlSize(.mini)
                 }
             }
+            #endif
             Spacer()
             Circle().fill(daemon.isOffline ? Color.red : FG.Palette.emerald).frame(width: 6, height: 6)
             Text(daemon.isOffline ? "Offline" : "Active").font(.caption2).foregroundColor(.secondary)

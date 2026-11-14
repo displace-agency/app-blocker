@@ -2,6 +2,8 @@
 # Builds build/FocusGuard-Installer.pkg (v1.1.0) from the output of Scripts/build.sh.
 # Mirrors what Scripts/install.sh installs: daemon + LaunchDaemon, menu-bar app, the
 # login agent, and /etc/focusguard defaults (never overwriting an existing list/config).
+# RELEASE NOTE: the public pkg must be built with FOCUSGUARD_PUBLIC=1 (PUBLIC_BUILD flag),
+# or the app ships the owner-only iPhone setup and profiles banner. Use Scripts/build-release.sh.
 # No configuration profile is bundled or installed; those stay optional, user-installed.
 set -euo pipefail
 

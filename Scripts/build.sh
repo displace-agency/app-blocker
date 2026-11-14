@@ -18,7 +18,15 @@ mkdir -p "$BUILD_DIR/daemon"
 
 # Build release binaries
 cd "$PROJECT_DIR"
-swift build -c release --scratch-path "$SCRATCH" 2>&1
+# FOCUSGUARD_PUBLIC=1 builds the public release: compiles with -DPUBLIC_BUILD, which hides
+# the owner-only iPhone setup row/window and the missing-profiles banner. Off by default,
+# so the owner's normal build is unchanged. Use Scripts/build-release.sh for releases.
+EXTRA_FLAGS=()
+if [ "${FOCUSGUARD_PUBLIC:-0}" = "1" ]; then
+    echo "PUBLIC_BUILD enabled"
+    EXTRA_FLAGS=(-Xswiftc -DPUBLIC_BUILD)
+fi
+swift build -c release --scratch-path "$SCRATCH" ${EXTRA_FLAGS[@]+"${EXTRA_FLAGS[@]}"} 2>&1
 
 # Copy menu bar app binary
 cp "$SCRATCH/release/FocusGuard" "$BUILD_DIR/FocusGuard.app/Contents/MacOS/FocusGuard"

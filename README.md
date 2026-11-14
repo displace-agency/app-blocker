@@ -9,6 +9,15 @@ Unlocking is deliberately slow and rate-limited.
 > moment, and by AI assistants. That is the point. A blocker you can casually switch
 > off is not a blocker.
 
+## Download
+
+Get the installer: https://github.com/displace-agency/app-blocker/releases/latest/download/FocusGuard.pkg
+(page: https://displace.agency/apps/focusguard).
+
+The installer is not notarized, so the first time you open it macOS will block it. Go to
+**System Settings > Privacy & Security** and click **Open Anyway**. The public build leaves
+out the iPhone setup that the author's own build has.
+
 ## Why FocusGuard
 
 Most blockers are browser extensions or apps you can quit, delete, or disable in
@@ -31,6 +40,10 @@ seconds. FocusGuard closes those escape hatches:
 ### App blocking
 - Force-quits blocked native apps (Steam, Discord, etc.) while locked. Only apps under
   `/Applications` are eligible, so system processes are never touched.
+
+### Tor Browser
+A fresh install also closes Tor Browser whenever it is running (`blockTor`, on by default),
+because Tor resolves names outside `/etc/hosts` and would bypass the block.
 
 ### Focus tools
 - **Focus Sessions:** a fixed 25 / 50 / 90-minute deep-work lock that cannot be
@@ -139,6 +152,11 @@ bash Scripts/create-pkg.sh
 # then double-click build/FocusGuard-Installer.pkg
 ```
 
+The public release is built from a clean export of the repo with
+`bash Scripts/build-release.sh` (runs `build.sh` with `FOCUSGUARD_PUBLIC=1`, which compiles
+with `-DPUBLIC_BUILD`, then `create-pkg.sh`). That flag hides the iPhone setup and the
+missing-profiles banner; a normal `build.sh` build keeps both.
+
 ### Updating
 
 Double-click `Scripts/update.command` in Finder. It rebuilds, reinstalls the app and
@@ -200,6 +218,8 @@ sudo launchctl bootout system/com.focusguard.blocker
 sudo rm /Library/LaunchDaemons/com.focusguard.blocker.plist
 sudo rm /usr/local/bin/focusguard-daemon
 sudo rm -rf /etc/focusguard
+sudo launchctl bootout gui/$(id -u)/com.focusguard.app
+sudo rm /Library/LaunchAgents/com.focusguard.app.plist
 sudo rm -rf /Applications/FocusGuard.app
 sudo sed -i '' '/FOCUSGUARD-START/,/FOCUSGUARD-END/d' /etc/hosts
 sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder
