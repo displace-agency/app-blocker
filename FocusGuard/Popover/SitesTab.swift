@@ -8,6 +8,12 @@ struct SitesTab: View {
     @State private var showGroups = false
     @FocusState.Binding var addFieldFocused: Bool
 
+    init(daemon: DaemonClient, addFieldFocused: FocusState<Bool>.Binding, showGroups: Bool = false) {
+        _daemon = ObservedObject(wrappedValue: daemon)
+        _addFieldFocused = addFieldFocused
+        _showGroups = State(initialValue: showGroups)
+    }
+
     private var canRemove: Bool { daemon.status == .unlocked && !daemon.sessionActive }
 
     private var inputError: String? {

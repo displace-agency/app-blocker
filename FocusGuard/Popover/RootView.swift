@@ -5,8 +5,16 @@ import FocusGuardShared
 struct RootView: View {
     @ObservedObject var daemon: DaemonClient
     @ObservedObject var notifier: UnlockNotifier
-    @State private var tab: Tab = .sites
+    @State private var tab: Tab
     @FocusState private var addFieldFocused: Bool
+    private let startWithGroups: Bool
+
+    init(daemon: DaemonClient, notifier: UnlockNotifier, tab: Tab = .sites, showGroups: Bool = false) {
+        _daemon = ObservedObject(wrappedValue: daemon)
+        _notifier = ObservedObject(wrappedValue: notifier)
+        _tab = State(initialValue: tab)
+        startWithGroups = showGroups
+    }
 
     enum Tab: Int, CaseIterable { case sites, apps, schedule, stats
         var title: String {
@@ -113,7 +121,7 @@ struct RootView: View {
     @ViewBuilder
     private var content: some View {
         switch tab {
-        case .sites: SitesTab(daemon: daemon, addFieldFocused: $addFieldFocused)
+        case .sites: SitesTab(daemon: daemon, addFieldFocused: $addFieldFocused, showGroups: startWithGroups)
         case .apps: AppsTab(daemon: daemon)
         case .schedule: ScheduleTab(daemon: daemon)
         case .stats: StatsTab(daemon: daemon)
@@ -227,6 +235,7 @@ struct RootView: View {
 
     private var hasPasscode: Bool { screenTimePasscode != nil }
     private var screenTimePasscode: String? {
+        if daemon.isDemo { return nil }
         let appSupport = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/FocusGuard/screentime_passcode")
         if let code = try? String(contentsOf: appSupport, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines), !code.isEmpty {

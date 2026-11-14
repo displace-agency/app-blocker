@@ -30,6 +30,13 @@ let package = Package(
             dependencies: ["FocusGuardShared"],
             path: "FocusGuardCore"
         ),
+        // Opt-in marketing screenshots of the real SwiftUI views (skipped unless
+        // FOCUSGUARD_MARKETING_CAPTURE=1). Uses a demo DaemonClient: no daemon, no /etc.
+        .testTarget(
+            name: "FocusGuardAppTests",
+            dependencies: ["FocusGuard", "FocusGuardShared"],
+            path: "Tests/FocusGuardAppTests"
+        ),
         .testTarget(
             name: "FocusGuardCoreTests",
             dependencies: ["FocusGuardCore", "FocusGuardShared"],

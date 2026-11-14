@@ -29,14 +29,15 @@ final class UnlockNotifier: NSObject, ObservableObject, UNUserNotificationCenter
 
     var onOpen: (() -> Void)?
 
-    private let center = UNUserNotificationCenter.current()
+    // Lazy so the demo notifier (screenshot capture, no app bundle) never touches it.
+    private lazy var center = UNUserNotificationCenter.current()
     private var lastStatus: BlockerStatus?
     private var scheduledReadyFor: Date?
     private var scheduledSoonFor: Date?
 
-    override init() {
+    init(demo: Bool = false) {
         super.init()
-        center.delegate = self
+        if !demo { center.delegate = self }
     }
 
     // MARK: - Permission

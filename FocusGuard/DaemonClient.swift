@@ -17,6 +17,10 @@ final class DaemonClient: ObservableObject {
     @Published private(set) var pendingAddApps: Set<String> = []
     @Published private(set) var pendingRemoveApps: Set<String> = []
 
+    /// True for the marketing-capture demo client: never reads the status file, never
+    /// polls and never talks to the daemon socket. Only built by `init(demo:)`.
+    private(set) var isDemo = false
+
     let toasts = ToastCenter()
     var onStatusChange: ((BlockerStatus) -> Void)?
     /// Called after every successful status read (for the notifier's reconcile).
@@ -31,6 +35,15 @@ final class DaemonClient: ObservableObject {
         pollTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.readStatusFile() }
         }
+    }
+
+    /// Demo client for the opt-in marketing capture test (FOCUSGUARD_MARKETING_CAPTURE=1):
+    /// shows the given state as-is, with no file reads, no timers and no socket traffic.
+    init(demo state: StatusInfo) {
+        info = state
+        statusFileReadable = true
+        isDemo = true
+        lastStatus = state.status
     }
 
     deinit { pollTimer?.invalidate() }
@@ -126,6 +139,7 @@ final class DaemonClient: ObservableObject {
 
     @discardableResult
     private func send(_ command: DaemonCommand, argument: String? = nil, success: String? = nil) async -> CommandResponse? {
+        if isDemo { return nil }
         let response = await SocketClient.send(CommandMessage(command: command, argument: argument))
         guard let response else {
             statusFileReadable = false
