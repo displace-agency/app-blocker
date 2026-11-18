@@ -53,7 +53,7 @@ enum L10n {
 
     enum Session {
         static let title = "Focus session"
-        static let subtitle = "Locks instantly. Cannot be cancelled until it ends."
+        static let subtitle = "Cannot be cancelled until it ends."
         static let active = "Focus session in progress"
     }
 

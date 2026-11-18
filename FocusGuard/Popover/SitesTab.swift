@@ -97,7 +97,7 @@ struct SitesTab: View {
             }
         }
         .opacity(pending ? 0.55 : 1)
-        .frame(height: 26)
+        .frame(height: 24)
     }
 
     private func submit() {

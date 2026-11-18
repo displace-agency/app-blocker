@@ -7,7 +7,7 @@ struct GroupsList: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: FG.Spacing.xs) {
-            Text("Quick add").fgEyebrow()
+            Text("Groups · \(DomainGroups.all.count)").fgEyebrow()
             LazyVStack(spacing: 0) {
                 ForEach(DomainGroups.all) { group in
                     groupRow(group)
@@ -19,6 +19,12 @@ struct GroupsList: View {
         }
     }
 
+    /// View-only: "Social Media" -> "Social media".
+    private static func sentenceCase(_ s: String) -> String {
+        guard let first = s.first else { return s }
+        return first.uppercased() + s.dropFirst().lowercased()
+    }
+
     private func groupRow(_ group: DomainGroup) -> some View {
         let blocked = Set(daemon.blockedDomains)
         let inGroup = Set(group.domains)
@@ -27,7 +33,7 @@ struct GroupsList: View {
 
         return HStack(spacing: FG.Spacing.m) {
             VStack(alignment: .leading, spacing: 1) {
-                Text(group.name).font(FG.bodyMedium).foregroundColor(FG.ink)
+                Text(Self.sentenceCase(group.name)).font(FG.bodyMedium).foregroundColor(FG.ink)
                 Text("\(group.domains.count) sites").fgCaption()
             }
             Spacer()
@@ -38,7 +44,7 @@ struct GroupsList: View {
                 }
                 .foregroundColor(FG.inkSecondary)
             } else {
-                Button("Block") { daemon.addDomains(missing) }
+                Button(missing.count < group.domains.count ? "Block \(missing.count)" : "Block") { daemon.addDomains(missing) }
                     .buttonStyle(.fgSecondarySmall)
             }
         }

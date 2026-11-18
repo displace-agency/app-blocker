@@ -30,6 +30,7 @@ final class MarketingCaptureTests: XCTestCase {
             daemonVersion: FocusGuardConfig.daemonProtocolVersion
         )
         if status == .unlockPending { s.unlockRequestTime = now.addingTimeInterval(-5 * 60) }
+        if status == .unlocked { s.cooldownEndTime = now.addingTimeInterval(11 * 60 + 40) }
         if status == .focusSession { s.sessionEndTime = now.addingTimeInterval(37 * 60 + 12) }
         s.stats = StatsSummary(completedUnlocks: 3, sessionsCompleted: 12, currentStreakDays: 6,
                                bestStreakDays: 14, unlockRequests: 5, deniedUnlocks: 2, focusMinutesToday: 75)
@@ -114,5 +115,9 @@ final class MarketingCaptureTests: XCTestCase {
         let stats = DaemonClient(demo: state(.locked))
         try snapshot(RootView(daemon: stats, notifier: notifier, tab: .stats),
                      width: w, dark: false, to: dir.appendingPathComponent("06-stats.png"))
+
+        let unlocked = DaemonClient(demo: state(.unlocked))
+        try snapshot(RootView(daemon: unlocked, notifier: notifier, tab: .sites),
+                     width: w, dark: false, to: dir.appendingPathComponent("07-unlocked.png"))
     }
 }

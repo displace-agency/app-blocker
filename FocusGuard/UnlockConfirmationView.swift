@@ -19,7 +19,7 @@ struct UnlockConfirmationView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: FG.Spacing.l) {
             VStack(alignment: .leading, spacing: FG.Spacing.s) {
-                Text("By Displace").fgEyebrow()
+                Text(L10n.appName).fgEyebrow()
                 Text(L10n.Unlock.title).fgTitle()
             }
 
@@ -46,7 +46,7 @@ struct UnlockConfirmationView: View {
                     onDismiss()
                 }
                 .buttonStyle(.fgPrimary)
-                .keyboardShortcut(.defaultAction)
+                .keyboardShortcut(.cancelAction)
 
                 Button(L10n.Unlock.confirm) {
                     onConfirm()

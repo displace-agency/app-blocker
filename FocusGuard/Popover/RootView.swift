@@ -47,7 +47,7 @@ struct RootView: View {
             }
             tabPicker
             ScrollView { content.padding(FG.Spacing.m) }
-                .frame(height: 286)
+                .frame(height: 292)
                 .background(FG.canvas)
             Divider().overlay(FG.hairline)
             actionZone
@@ -92,7 +92,7 @@ struct RootView: View {
         let budget = "\(left) of \(daemon.maxUnlocksPerDay) unlocks left today."
         switch daemon.status {
         case .locked: return "Locked. \(budget)"
-        case .unlockPending: return "Unlock requested. \(left) of \(daemon.maxUnlocksPerDay) left today."
+        case .unlockPending: return "Unlock requested. You can still cancel."
         case .unlocked: return daemon.outsideScheduledHours ? "Open outside scheduled hours." : "Unlocked. Auto-lock is running."
         case .focusSession: return "Focus session in progress."
         }
@@ -220,14 +220,18 @@ struct RootView: View {
     }
 
     private var sessionCard: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(L10n.Session.title).fgEyebrow()
-            if let deadline = daemon.sessionDeadline {
-                CountdownText(deadline: deadline, prefix: "", color: FG.ink).font(FG.bigNumber(28))
+        HStack(alignment: .center, spacing: FG.Spacing.m) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(L10n.Session.title).fgEyebrow()
+                Text(L10n.Session.subtitle).fgCaption()
             }
-            Text(L10n.Session.subtitle).fgCaption()
+            Spacer(minLength: 0)
+            if let deadline = daemon.sessionDeadline {
+                CountdownText(deadline: deadline, prefix: "", color: FG.ink).font(FG.bigNumber(24))
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading).padding(FG.Spacing.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, FG.Spacing.m).frame(height: 48)
         .fgCard()
     }
 
