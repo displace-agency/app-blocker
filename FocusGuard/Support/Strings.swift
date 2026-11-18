@@ -13,24 +13,26 @@ enum L10n {
     }
 
     enum Action {
-        static let startSession = "Start Focus Session"
-        static let requestUnlock = "Request Unlock"
-        static let cancelUnlock = "Cancel Unlock"
-        static let lockNow = "Lock Now"
+        static let startSession = "Start focus session"
+        static let requestUnlock = "Request unlock"
+        static let cancelUnlock = "Cancel unlock"
+        static let lockNow = "Lock now"
         static let budgetExhausted = "No unlocks left today"
         static let quit = "Quit FocusGuard"
-        static let replayIntro = "Replay Introduction"
+        static let replayIntro = "Replay introduction"
     }
 
     enum Sites {
         static let addPlaceholder = "Add a site to block…"
-        static let groups = "Quick Groups"
+        static let myList = "My list"
+        static let yourList = "Your list"
+        static let groups = "Groups"
         static let empty = "No sites blocked yet."
         static let removeHint = "Removing sites is only possible during an unlock window."
     }
 
     enum Apps {
-        static let choose = "Choose App…"
+        static let choose = "Choose app…"
         static let empty = "No apps blocked yet."
         static let warning = "Blocked apps are force-quit while FocusGuard is locked. Unsaved work will be lost."
         static let onlyApplications = "Only apps inside /Applications can be blocked."
@@ -38,13 +40,19 @@ enum L10n {
 
     enum Schedule {
         static let empty = "No schedules. Add one to auto-lock on a weekly routine."
-        static let add = "Add Schedule"
+        static let add = "Add schedule"
         static let outsideHours = "Outside scheduled hours — sites are open."
         static let note = "When schedules exist, blocking is active only during their windows. Focus sessions and the blocklist still apply."
     }
 
+    enum Unlock {
+        static let title = "Request an unlock"
+        static let keepLocked = "Keep it locked"
+        static let confirm = "Confirm unlock"
+    }
+
     enum Session {
-        static let title = "Focus Session"
+        static let title = "Focus session"
         static let subtitle = "Locks instantly. Cannot be cancelled until it ends."
         static let active = "Focus session in progress"
     }

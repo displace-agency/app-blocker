@@ -1,29 +1,21 @@
 import SwiftUI
 import FocusGuardShared
 
-/// Quick-add preset domain groups, shown as a push inside the Sites tab.
+/// Quick-add preset domain groups, shown under the Groups segment of the Sites tab.
 struct GroupsList: View {
     @ObservedObject var daemon: DaemonClient
-    @Binding var showGroups: Bool
 
     var body: some View {
-        VStack(spacing: FG.Spacing.s) {
-            HStack {
-                Button { withAnimation(FG.Motion.quick) { showGroups = false } } label: {
-                    HStack(spacing: 4) { Image(systemName: "chevron.left").font(.caption2); Text("Sites") }.font(.caption)
-                }
-                .buttonStyle(.plain).foregroundColor(FG.Palette.emerald)
-                Spacer()
-            }
-
-            ScrollView {
-                LazyVStack(spacing: FG.Spacing.s) {
-                    ForEach(DomainGroups.all) { group in
-                        groupRow(group)
-                    }
+        VStack(alignment: .leading, spacing: FG.Spacing.xs) {
+            Text("Quick add").fgEyebrow()
+            LazyVStack(spacing: 0) {
+                ForEach(DomainGroups.all) { group in
+                    groupRow(group)
+                    if group.id != DomainGroups.all.last?.id { Divider().overlay(FG.hairline) }
                 }
             }
-            .frame(maxHeight: 250)
+            .padding(.horizontal, FG.Spacing.m)
+            .fgCard()
         }
     }
 
@@ -34,20 +26,22 @@ struct GroupsList: View {
         let missing = group.domains.filter { !blocked.contains($0) }
 
         return HStack(spacing: FG.Spacing.m) {
-            Image(systemName: group.icon).foregroundColor(FG.Palette.emerald).frame(width: 22)
             VStack(alignment: .leading, spacing: 1) {
-                Text(group.name).font(.caption).fontWeight(.medium)
-                Text("\(group.domains.count) sites").font(.caption2).foregroundColor(.secondary)
+                Text(group.name).font(FG.bodyMedium).foregroundColor(FG.ink)
+                Text("\(group.domains.count) sites").fgCaption()
             }
             Spacer()
             if allBlocked {
-                Image(systemName: "checkmark.circle.fill").foregroundColor(FG.Palette.emerald)
+                HStack(spacing: 4) {
+                    Image(systemName: "checkmark").font(.system(size: 9, weight: .bold))
+                    Text("Blocked").font(.system(size: 12, weight: .medium))
+                }
+                .foregroundColor(FG.inkSecondary)
             } else {
-                Button("Block \(missing.count)") { daemon.addDomains(missing) }
-                    .font(.caption2).buttonStyle(.borderedProminent).tint(FG.Palette.emerald).controlSize(.small)
+                Button("Block") { daemon.addDomains(missing) }
+                    .buttonStyle(.fgSecondarySmall)
             }
         }
-        .padding(FG.Spacing.s)
-        .background(FG.Palette.bgCard, in: RoundedRectangle(cornerRadius: FG.Radius.m))
+        .padding(.vertical, 6)
     }
 }

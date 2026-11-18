@@ -48,9 +48,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         popover = NSPopover()
         popover.contentSize = FG.Layout.popover
         popover.behavior = .transient
-        // The popover palette is fixed dark (FG.Palette.bgDark); keep system colors dark too,
-        // otherwise light-mode Macs get black text on a dark background.
-        popover.appearance = NSAppearance(named: .darkAqua)
+        // The popover palette is fixed light (Displace look); force aqua so system controls
+        // match in both light and dark macOS.
+        popover.appearance = NSAppearance(named: .aqua)
         popover.delegate = self
         popover.contentViewController = NSHostingController(rootView: RootView(daemon: daemon, notifier: notifier))
 

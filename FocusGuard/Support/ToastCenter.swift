@@ -24,10 +24,10 @@ final class ToastCenter: ObservableObject {
         }
         var color: Color {
             switch self {
-            case .success: return FG.Palette.emerald
-            case .error: return .red
-            case .info: return .secondary
-            case .warning: return .orange
+            case .success: return FG.ink
+            case .error: return FG.danger
+            case .info: return FG.inkSecondary
+            case .warning: return FG.accent
             }
         }
     }

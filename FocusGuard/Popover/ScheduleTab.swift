@@ -13,8 +13,7 @@ struct ScheduleTab: View {
     var body: some View {
         VStack(spacing: FG.Spacing.s) {
             if daemon.outsideScheduledHours {
-                Label(L10n.Schedule.outsideHours, systemImage: "moon.zzz")
-                    .font(.caption2).foregroundColor(.secondary).frame(maxWidth: .infinity, alignment: .leading)
+                Text(L10n.Schedule.outsideHours).fgCaption().frame(maxWidth: .infinity, alignment: .leading)
             }
 
             if editing {
@@ -26,36 +25,39 @@ struct ScheduleTab: View {
                     list
                 }
                 Button { withAnimation(FG.Motion.quick) { editing = true } } label: {
-                    Label(L10n.Schedule.add, systemImage: "plus").font(.caption)
+                    Text(L10n.Schedule.add)
                 }
-                .buttonStyle(.borderedProminent).tint(FG.Palette.emerald).controlSize(.small)
+                .buttonStyle(.fgSecondary)
             }
 
-            Text(L10n.Schedule.note).font(.caption2).foregroundColor(Color(white: 0.4))
+            Text(L10n.Schedule.note).fgCaption()
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
     private var list: some View {
-        ScrollView {
-            LazyVStack(spacing: FG.Spacing.s) {
+        VStack(alignment: .leading, spacing: FG.Spacing.xs) {
+            Text("Weekly · \(daemon.schedules.count)").fgEyebrow()
+                .frame(maxWidth: .infinity, alignment: .leading)
+            LazyVStack(spacing: 0) {
                 ForEach(daemon.schedules) { schedule in
                     HStack {
-                        Image(systemName: "calendar").foregroundColor(FG.Palette.emerald)
-                        Text(schedule.summary).font(.caption)
+                        Text(schedule.summary).font(FG.bodyFont).foregroundColor(FG.ink)
                         Spacer()
                         Button { daemon.removeSchedule(schedule.id) } label: {
-                            Image(systemName: "xmark.circle.fill").foregroundColor(.secondary)
+                            Image(systemName: "xmark").font(.system(size: 10, weight: .medium)).foregroundColor(FG.inkSecondary)
                         }
                         .buttonStyle(.plain)
                         .disabled(daemon.status != .unlocked)
+                        .opacity(daemon.status == .unlocked ? 1 : 0.4)
                         .accessibilityLabel("Remove schedule")
                     }
-                    .padding(FG.Spacing.s)
-                    .background(FG.Palette.bgCard, in: RoundedRectangle(cornerRadius: FG.Radius.m))
+                    .frame(minHeight: 36)
+                    if schedule.id != daemon.schedules.last?.id { Divider().overlay(FG.hairline) }
                 }
             }
-            .frame(maxHeight: 180)
+            .padding(.horizontal, FG.Spacing.m)
+            .fgCard()
         }
     }
 
@@ -67,38 +69,37 @@ struct ScheduleTab: View {
                     Button {
                         if on { days.remove(num) } else { days.insert(num) }
                     } label: {
-                        Text(label).font(.caption).fontWeight(.semibold)
-                            .frame(width: 28, height: 28)
-                            .background(on ? FG.Palette.emerald : FG.Palette.bgCard, in: Circle())
-                            .foregroundColor(on ? .black : .secondary)
+                        Text(label).font(.system(size: 12, weight: .medium))
+                            .frame(width: 30, height: 28)
+                            .background(on ? FG.ink : FG.surface, in: RoundedRectangle(cornerRadius: FG.Radius.control))
+                            .overlay(RoundedRectangle(cornerRadius: FG.Radius.control).stroke(on ? FG.ink : FG.border, lineWidth: 1))
+                            .foregroundColor(on ? .white : FG.ink)
                     }
                     .buttonStyle(.plain)
                 }
             }
             HStack {
                 DatePicker("From", selection: $start, displayedComponents: .hourAndMinute).labelsHidden()
-                Text("to").font(.caption).foregroundColor(.secondary)
+                Text("to").fgCaption()
                 DatePicker("To", selection: $end, displayedComponents: .hourAndMinute).labelsHidden()
             }
-            HStack {
+            HStack(spacing: FG.Spacing.s) {
                 Button("Cancel") { withAnimation(FG.Motion.quick) { editing = false } }
-                    .buttonStyle(.plain).font(.caption)
-                Spacer()
+                    .buttonStyle(.fgSecondary)
                 Button("Save") { save() }
-                    .buttonStyle(.borderedProminent).tint(FG.Palette.emerald).controlSize(.small)
+                    .buttonStyle(.fgPrimary)
                     .disabled(days.isEmpty)
             }
         }
-        .padding(FG.Spacing.s)
-        .background(FG.Palette.bgInset, in: RoundedRectangle(cornerRadius: FG.Radius.l))
+        .padding(FG.Spacing.m)
+        .frame(maxWidth: .infinity)
+        .fgCard()
     }
 
     private var empty: some View {
-        VStack(spacing: FG.Spacing.s) {
-            Image(systemName: "calendar.badge.clock").font(.title2).foregroundColor(Color(white: 0.3))
-            Text(L10n.Schedule.empty).font(.caption).foregroundColor(.secondary).multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity).padding(.vertical, FG.Spacing.l)
+        Text(L10n.Schedule.empty).fgCaption().multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity).padding(.vertical, FG.Spacing.l)
+            .fgCard()
     }
 
     private func save() {

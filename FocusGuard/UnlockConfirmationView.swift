@@ -14,48 +14,52 @@ struct UnlockConfirmationView: View {
         confirmText == requiredPhrase
     }
 
+    @FocusState private var fieldFocused: Bool
+
     var body: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 40))
-                .foregroundColor(.orange)
-
-            Text("Are you sure you want to unlock?")
-                .font(.headline)
-
-            Text("Blocks will lift in \(delayMinutes) minutes.\nYou'll have \(windowMinutes) minutes before auto-relock.\nFocusGuard will notify you when it's ready.")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Type: \"\(requiredPhrase)\"")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-
-                TextField("", text: $confirmText)
-                    .textFieldStyle(.roundedBorder)
+        VStack(alignment: .leading, spacing: FG.Spacing.l) {
+            VStack(alignment: .leading, spacing: FG.Spacing.s) {
+                Text("By Displace").fgEyebrow()
+                Text(L10n.Unlock.title).fgTitle()
             }
 
-            HStack(spacing: 12) {
-                Button("Cancel") {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Blocks will lift in \(delayMinutes) minutes.")
+                Text("You'll have \(windowMinutes) minutes before auto-relock.")
+                Text("FocusGuard will notify you when it's ready.").foregroundColor(FG.inkSecondary)
+            }
+            .font(FG.bodyFont).foregroundColor(FG.ink)
+            .fixedSize(horizontal: false, vertical: true)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Type: \"\(requiredPhrase)\"").fgCaption()
+                TextField("", text: $confirmText)
+                    .textFieldStyle(.plain)
+                    .font(FG.bodyFont).foregroundColor(FG.ink)
+                    .focused($fieldFocused)
+                    .fgField(focused: fieldFocused)
+            }
+
+            HStack(spacing: FG.Spacing.s) {
+                Button(L10n.Unlock.keepLocked) {
                     confirmText = ""
                     onDismiss()
                 }
-                .keyboardShortcut(.cancelAction)
+                .buttonStyle(.fgPrimary)
+                .keyboardShortcut(.defaultAction)
 
-                Button("Confirm Unlock") {
+                Button(L10n.Unlock.confirm) {
                     onConfirm()
                     confirmText = ""
                     onDismiss()
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(.orange)
+                .buttonStyle(.fgSecondary)
                 .disabled(!isConfirmEnabled)
-                .keyboardShortcut(.defaultAction)
             }
         }
-        .padding(24)
+        .padding(FG.Spacing.xl)
         .frame(width: 340)
+        .background(FG.surface)
+        .preferredColorScheme(.light)
     }
 }

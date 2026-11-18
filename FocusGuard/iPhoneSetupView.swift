@@ -9,7 +9,6 @@ struct iPhoneSetupView: View {
 
     @State private var selectedOption: SetupOption? = nil
 
-    private let emerald = Color(red: 0.204, green: 0.827, blue: 0.600)
     private let profileURL = "https://focusguard-dns.displace-agency-2-0.workers.dev/profile"
 
     enum SetupOption {
@@ -24,7 +23,7 @@ struct iPhoneSetupView: View {
                 Button { onDismiss() } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.title3)
-                        .foregroundColor(Color(white: 0.3))
+                        .foregroundColor(FG.inkTertiary)
                 }
                 .buttonStyle(.plain)
                 Spacer()
@@ -42,7 +41,8 @@ struct iPhoneSetupView: View {
             }
         }
         .frame(width: 360, height: 440)
-        .background(Color(white: 0.06))
+        .background(FG.surface)
+        .preferredColorScheme(.light)
     }
 
     // MARK: - Options Menu
@@ -53,20 +53,20 @@ struct iPhoneSetupView: View {
 
             Image(systemName: "iphone")
                 .font(.system(size: 44))
-                .foregroundColor(emerald)
+                .foregroundColor(FG.ink)
 
             Text("Protect Your iPhone")
                 .font(.title3).fontWeight(.bold)
 
             Text("Two layers of protection")
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundColor(FG.inkSecondary)
 
             VStack(spacing: 10) {
                 // Option 1: DNS Profile
                 optionCard(
                     icon: "network",
-                    title: "Install DNS Blocker",
+                    title: "Install DNS blocker",
                     subtitle: "Scan QR code to block websites. Synced with Mac. Takes 10 seconds.",
                     recommended: true
                 ) { selectedOption = .dnsProfile }
@@ -74,7 +74,7 @@ struct iPhoneSetupView: View {
                 // Option 2: Screen Time Lock
                 optionCard(
                     icon: "lock.shield",
-                    title: "Lock with Screen Time",
+                    title: "Lock with Screen time",
                     subtitle: "Prevents profile removal. Makes blocking permanent.",
                     recommended: false
                 ) { selectedOption = .screenTimePasscode }
@@ -85,7 +85,7 @@ struct iPhoneSetupView: View {
 
             Text("Install DNS first, then lock with Screen Time")
                 .font(.caption2)
-                .foregroundColor(Color(white: 0.35))
+                .foregroundColor(FG.inkSecondary)
                 .padding(.bottom, 16)
         }
     }
@@ -95,7 +95,7 @@ struct iPhoneSetupView: View {
             HStack(spacing: 12) {
                 Image(systemName: icon)
                     .font(.title2)
-                    .foregroundColor(emerald)
+                    .foregroundColor(FG.ink)
                     .frame(width: 36)
 
                 VStack(alignment: .leading, spacing: 3) {
@@ -103,20 +103,19 @@ struct iPhoneSetupView: View {
                         Text(title)
                             .font(.subheadline)
                             .fontWeight(.semibold)
-                            .foregroundColor(.white)
+                            .foregroundColor(FG.ink)
                         if recommended {
                             Text("START HERE")
                                 .font(.system(size: 8, weight: .bold))
-                                .foregroundColor(emerald)
-                                .padding(.horizontal, 5)
+                                .foregroundColor(FG.ink)
+                                .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
-                                .background(emerald.opacity(0.15))
-                                .cornerRadius(4)
+                                .background(FG.accentFill, in: Capsule())
                         }
                     }
                     Text(subtitle)
                         .font(.caption2)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(FG.inkSecondary)
                         .lineLimit(2)
                 }
 
@@ -124,15 +123,10 @@ struct iPhoneSetupView: View {
 
                 Image(systemName: "chevron.right")
                     .font(.caption)
-                    .foregroundColor(Color(white: 0.3))
+                    .foregroundColor(FG.inkTertiary)
             }
             .padding(14)
-            .background(Color(white: 0.1))
-            .cornerRadius(12)
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(recommended ? emerald.opacity(0.3) : Color.clear, lineWidth: 1)
-            )
+            .fgCard()
         }
         .buttonStyle(.plain)
     }
@@ -143,7 +137,6 @@ struct iPhoneSetupView: View {
 struct QRProfileView: View {
     var onDismiss: () -> Void
     let profileURL: String
-    private let emerald = Color(red: 0.204, green: 0.827, blue: 0.600)
 
     var body: some View {
         VStack(spacing: 16) {
@@ -158,13 +151,13 @@ struct QRProfileView: View {
                     .resizable()
                     .interpolation(.none)
                     .frame(width: 180, height: 180)
-                    .cornerRadius(12)
+                    .cornerRadius(FG.Radius.card)
                     .accessibilityLabel("QR code to install the DNS blocker profile")
             } else {
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(Color(white: 0.15))
+                    .fill(FG.canvas)
                     .frame(width: 180, height: 180)
-                    .overlay(Image(systemName: "qrcode").font(.largeTitle).foregroundColor(.secondary))
+                    .overlay(Image(systemName: "qrcode").font(.largeTitle).foregroundColor(FG.inkSecondary))
             }
 
             VStack(spacing: 6) {
@@ -174,24 +167,20 @@ struct QRProfileView: View {
                 Text("4. Tap Install > Install > Done")
             }
             .font(.caption)
-            .foregroundColor(.secondary)
+            .foregroundColor(FG.inkSecondary)
 
             Spacer()
 
             Text("Domains are synced with your Mac automatically")
                 .font(.caption2)
-                .foregroundColor(emerald)
+                .foregroundColor(FG.ink)
 
             Button {
                 onDismiss()
             } label: {
                 Text("Done")
-                    .fontWeight(.semibold)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 11)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(emerald)
+            .buttonStyle(.fgPrimary)
             .padding(.horizontal, 32)
             .padding(.bottom, 16)
         }
@@ -210,7 +199,6 @@ struct ScreenTimeSetupView: View {
     @State private var isSecondRound = false
     @State private var passcode = ""
 
-    private let emerald = Color(red: 0.204, green: 0.827, blue: 0.600)
 
     enum Phase { case intro, tapping, reenter, lockdown, done }
 
@@ -229,16 +217,16 @@ struct ScreenTimeSetupView: View {
             Spacer()
             Image(systemName: "lock.shield")
                 .font(.system(size: 40))
-                .foregroundColor(emerald)
+                .foregroundColor(FG.ink)
             Text("Lock Screen Time")
                 .font(.title3).fontWeight(.bold)
             Text("This prevents the DNS profile\nfrom being removed.")
                 .font(.callout)
-                .foregroundColor(.secondary)
+                .foregroundColor(FG.inkSecondary)
                 .multilineTextAlignment(.center)
             Text("On iPhone, go to:\nSettings > Screen Time\nTurn it on > Use Screen Time Passcode")
                 .font(.caption)
-                .foregroundColor(Color(white: 0.4))
+                .foregroundColor(FG.inkSecondary)
                 .multilineTextAlignment(.center)
                 .lineSpacing(3)
             Spacer()
@@ -257,26 +245,26 @@ struct ScreenTimeSetupView: View {
 
             Text(isSecondRound ? "Re-enter" : "Enter passcode")
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundColor(FG.inkSecondary)
 
             HStack(spacing: 6) {
                 ForEach(0..<4, id: \.self) { i in
                     Circle()
-                        .fill(i < currentDigit ? emerald : i == currentDigit ? emerald.opacity(0.5) : Color(white: 0.2))
+                        .fill(i < currentDigit ? FG.ink : i == currentDigit ? FG.inkSecondary : FG.border)
                         .frame(width: 10, height: 10)
                 }
             }
 
             if currentDigit < digits.count {
                 Text("\(digits[currentDigit])")
-                    .font(.system(size: 120, weight: .heavy, design: .rounded))
-                    .foregroundColor(emerald)
+                    .font(.system(size: 120, weight: .light))
+                    .foregroundColor(FG.ink)
                     .monospacedDigit()
                     .padding(.vertical, 4)
 
                 Text("Tap this on iPhone")
                     .font(.callout)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(FG.inkSecondary)
             }
 
             Spacer()
@@ -300,11 +288,11 @@ struct ScreenTimeSetupView: View {
             Spacer()
             Image(systemName: "arrow.counterclockwise")
                 .font(.system(size: 36))
-                .foregroundColor(.orange)
+                .foregroundColor(FG.accent)
             Text("Re-enter passcode")
                 .font(.title3).fontWeight(.bold)
             Text("iPhone asks to confirm.")
-                .font(.callout).foregroundColor(.secondary)
+                .font(.callout).foregroundColor(FG.inkSecondary)
             Spacer()
             button("Show digits again") {
                 isSecondRound = true
@@ -321,7 +309,7 @@ struct ScreenTimeSetupView: View {
             Spacer()
             Image(systemName: "lock.shield.fill")
                 .font(.system(size: 36))
-                .foregroundColor(emerald)
+                .foregroundColor(FG.ink)
             Text("Lock it down")
                 .font(.title3).fontWeight(.bold)
 
@@ -331,8 +319,7 @@ struct ScreenTimeSetupView: View {
                 step("3", "Allow Changes > Account Changes > Don't Allow")
             }
             .padding(12)
-            .background(Color(white: 0.1))
-            .cornerRadius(10)
+            .fgCard()
 
             Spacer()
             button("Done") { phase = .done }
@@ -346,12 +333,12 @@ struct ScreenTimeSetupView: View {
             Spacer()
             Image(systemName: "checkmark.shield.fill")
                 .font(.system(size: 48))
-                .foregroundColor(emerald)
+                .foregroundColor(FG.ink)
             Text("iPhone locked")
                 .font(.title3).fontWeight(.bold)
             Text("Profile can't be removed.\nPasscode visible in FocusGuard when unlocked.")
                 .font(.callout)
-                .foregroundColor(.secondary)
+                .foregroundColor(FG.inkSecondary)
                 .multilineTextAlignment(.center)
             Spacer()
             button("Close") { onDismiss() }
@@ -362,19 +349,16 @@ struct ScreenTimeSetupView: View {
 
     private func button(_ title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text(title).fontWeight(.semibold)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 11)
+            Text(title)
         }
-        .buttonStyle(.borderedProminent)
-        .tint(emerald)
+        .buttonStyle(.fgPrimary)
     }
 
     private func step(_ num: String, _ text: String) -> some View {
         HStack(alignment: .top, spacing: 8) {
-            Text(num).font(.caption2).fontWeight(.bold).foregroundColor(emerald)
-                .frame(width: 16, height: 16).background(emerald.opacity(0.15)).cornerRadius(8)
-            Text(text).font(.caption).foregroundColor(.white)
+            Text(num).font(.caption2).fontWeight(.bold).foregroundColor(FG.ink)
+                .frame(width: 16, height: 16).background(FG.canvas, in: Circle())
+            Text(text).font(.caption).foregroundColor(FG.ink)
         }
     }
 

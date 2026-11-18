@@ -9,13 +9,10 @@ struct OnboardingView: View {
     let daemon: DaemonClient
     let onComplete: () -> Void
 
-    private let emerald = Color(red: 0.204, green: 0.831, blue: 0.600) // #34d399
-    private let darkBg = Color(red: 0.102, green: 0.102, blue: 0.102) // #1a1a1a
-    private let cardBg = Color(red: 0.165, green: 0.165, blue: 0.165) // #2a2a2a
 
     var body: some View {
         ZStack {
-            darkBg.ignoresSafeArea()
+            FG.surface.ignoresSafeArea()
 
             VStack(spacing: 0) {
                 // Step content
@@ -51,21 +48,21 @@ struct OnboardingView: View {
 
             Image(systemName: "shield.checkered")
                 .font(.system(size: 72))
-                .foregroundColor(emerald)
+                .foregroundColor(FG.ink)
 
             Text("Welcome to FocusGuard")
-                .font(.system(size: 28, weight: .bold))
-                .foregroundColor(.white)
+                .font(.system(size: 22, weight: .semibold)).tracking(0.6).textCase(.uppercase)
+                .foregroundColor(FG.ink)
 
             Text("A website blocker that actually works.\nNo app cleaner can remove it.")
                 .font(.body)
-                .foregroundColor(.gray)
+                .foregroundColor(FG.inkSecondary)
                 .multilineTextAlignment(.center)
                 .lineSpacing(4)
 
             Spacer()
 
-            primaryButton("Get Started") {
+            primaryButton("Get started") {
                 advance()
             }
             .padding(.bottom, 8)
@@ -80,8 +77,8 @@ struct OnboardingView: View {
             Spacer()
 
             Text("How It Works")
-                .font(.system(size: 24, weight: .bold))
-                .foregroundColor(.white)
+                .font(.system(size: 18, weight: .semibold)).tracking(0.6).textCase(.uppercase)
+                .foregroundColor(FG.ink)
 
             VStack(spacing: 16) {
                 featureRow(
@@ -121,25 +118,22 @@ struct OnboardingView: View {
         HStack(spacing: 16) {
             Image(systemName: icon)
                 .font(.system(size: 24))
-                .foregroundColor(emerald)
+                .foregroundColor(FG.ink)
                 .frame(width: 40, height: 40)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(.white)
+                    .foregroundColor(FG.ink)
                 Text(description)
                     .font(.system(size: 13))
-                    .foregroundColor(.gray)
+                    .foregroundColor(FG.inkSecondary)
             }
 
             Spacer()
         }
         .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(cardBg)
-        )
+        .fgCard()
     }
 
     // MARK: - Step 3: Choose What to Block
@@ -147,8 +141,8 @@ struct OnboardingView: View {
     private var chooseBlocksStep: some View {
         VStack(spacing: 16) {
             Text("Choose What to Block")
-                .font(.system(size: 24, weight: .bold))
-                .foregroundColor(.white)
+                .font(.system(size: 18, weight: .semibold)).tracking(0.6).textCase(.uppercase)
+                .foregroundColor(FG.ink)
                 .padding(.top, 28)
 
             LazyVGrid(columns: [
@@ -164,7 +158,7 @@ struct OnboardingView: View {
 
             Text("You can always add or remove sites later from the menu bar")
                 .font(.system(size: 12))
-                .foregroundColor(.gray)
+                .foregroundColor(FG.inkSecondary)
                 .multilineTextAlignment(.center)
 
             Spacer(minLength: 0)
@@ -192,25 +186,22 @@ struct OnboardingView: View {
             VStack(spacing: 8) {
                 Image(systemName: group.icon)
                     .font(.system(size: 24))
-                    .foregroundColor(isSelected ? emerald : .gray)
+                    .foregroundColor(isSelected ? FG.ink : FG.inkSecondary)
 
                 Text(group.name)
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(.white)
+                    .foregroundColor(FG.ink)
 
                 Text("\(group.domains.count) sites")
                     .font(.system(size: 11))
-                    .foregroundColor(.gray)
+                    .foregroundColor(FG.inkSecondary)
             }
             .frame(maxWidth: .infinity)
             .frame(height: 100)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(cardBg)
-            )
+            .background(isSelected ? FG.canvas : FG.surface, in: RoundedRectangle(cornerRadius: FG.Radius.card))
             .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(isSelected ? emerald : Color.clear, lineWidth: 2)
+                RoundedRectangle(cornerRadius: FG.Radius.card)
+                    .stroke(isSelected ? FG.ink : FG.border, lineWidth: isSelected ? 1.5 : 1)
             )
         }
         .buttonStyle(.plain)
@@ -224,33 +215,33 @@ struct OnboardingView: View {
 
             Image(systemName: "checkmark.shield.fill")
                 .font(.system(size: 64))
-                .foregroundColor(emerald)
+                .foregroundColor(FG.ink)
 
             Text("You're all set!")
-                .font(.system(size: 28, weight: .bold))
-                .foregroundColor(.white)
+                .font(.system(size: 22, weight: .semibold)).tracking(0.6).textCase(.uppercase)
+                .foregroundColor(FG.ink)
 
             Text("FocusGuard is now protecting your focus.")
                 .font(.body)
-                .foregroundColor(.gray)
+                .foregroundColor(FG.inkSecondary)
 
             // Menu bar hint
             HStack(spacing: 8) {
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(Color.white.opacity(0.1))
+                RoundedRectangle(cornerRadius: FG.Radius.control)
+                    .fill(FG.canvas)
                     .frame(height: 28)
                     .overlay(
                         HStack(spacing: 6) {
                             Spacer()
                             Image(systemName: "wifi")
                                 .font(.system(size: 12))
-                                .foregroundColor(.gray)
+                                .foregroundColor(FG.inkSecondary)
                             Image(systemName: "battery.75percent")
                                 .font(.system(size: 12))
-                                .foregroundColor(.gray)
+                                .foregroundColor(FG.inkSecondary)
                             Image(systemName: "shield.checkered")
                                 .font(.system(size: 12))
-                                .foregroundColor(emerald)
+                                .foregroundColor(FG.ink)
                                 .padding(.trailing, 8)
                         }
                     )
@@ -260,19 +251,19 @@ struct OnboardingView: View {
 
             Text("Look for the shield icon in your menu bar\nto manage your blocks.")
                 .font(.system(size: 13))
-                .foregroundColor(.gray)
+                .foregroundColor(FG.inkSecondary)
                 .multilineTextAlignment(.center)
                 .lineSpacing(3)
 
             Text("To unlock blocked sites, you'll need to\ntype a confirmation phrase and wait.")
                 .font(.system(size: 12))
-                .foregroundColor(Color.white.opacity(0.4))
+                .foregroundColor(FG.inkTertiary)
                 .multilineTextAlignment(.center)
                 .lineSpacing(3)
 
             Spacer()
 
-            primaryButton("Start Blocking") {
+            primaryButton("Start blocking") {
                 sendSelectedGroupsToDaemon()
                 hasCompletedOnboarding = true
                 onComplete()
@@ -287,16 +278,8 @@ struct OnboardingView: View {
     private func primaryButton(_ title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .frame(height: 44)
-                .background(
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(emerald)
-                )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(FGPrimaryButtonStyle(height: 40))
         .frame(maxWidth: 280)
     }
 
@@ -304,7 +287,7 @@ struct OnboardingView: View {
         HStack(spacing: 8) {
             ForEach(0..<4, id: \.self) { index in
                 Capsule()
-                    .fill(index == currentStep ? emerald : Color.white.opacity(0.2))
+                    .fill(index == currentStep ? FG.ink : FG.border)
                     .frame(width: index == currentStep ? 24 : 8, height: 8)
                     .animation(.easeInOut(duration: 0.2), value: currentStep)
             }

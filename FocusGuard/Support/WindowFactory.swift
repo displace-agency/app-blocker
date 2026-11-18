@@ -6,7 +6,7 @@ import SwiftUI
 enum WindowFactory {
     struct Style {
         var size: NSSize?
-        var darkChrome: Bool = true
+        var darkChrome: Bool = true // kept for call sites; every window is now light
         var hideTitle: Bool = false
         var movableByBackground: Bool = false
     }
@@ -20,7 +20,8 @@ enum WindowFactory {
         window.titlebarAppearsTransparent = true
         if style.hideTitle { window.titleVisibility = .hidden }
         window.isMovableByWindowBackground = style.movableByBackground
-        if style.darkChrome { window.backgroundColor = FG.Palette.bgDarkNS }
+        window.appearance = NSAppearance(named: .aqua)
+        window.backgroundColor = NSColor.white
         window.center()
         window.isReleasedWhenClosed = false
         window.level = .floating

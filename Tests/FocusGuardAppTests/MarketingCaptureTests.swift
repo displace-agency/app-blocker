@@ -30,6 +30,9 @@ final class MarketingCaptureTests: XCTestCase {
             daemonVersion: FocusGuardConfig.daemonProtocolVersion
         )
         if status == .unlockPending { s.unlockRequestTime = now.addingTimeInterval(-5 * 60) }
+        if status == .focusSession { s.sessionEndTime = now.addingTimeInterval(37 * 60 + 12) }
+        s.stats = StatsSummary(completedUnlocks: 3, sessionsCompleted: 12, currentStreakDays: 6,
+                               bestStreakDays: 14, unlockRequests: 5, deniedUnlocks: 2, focusMinutesToday: 75)
         return s
     }
 
@@ -44,8 +47,8 @@ final class MarketingCaptureTests: XCTestCase {
     /// Borderless windows refuse key status by default; a key window draws controls active.
     private final class KeyWindow: NSWindow { override var canBecomeKey: Bool { true } }
 
-    /// `dark`: the popover has a fixed dark palette and the app forces a dark appearance on
-    /// it (see AppDelegate), so it is captured dark; the unlock dialog is a normal light window.
+    /// `dark`: kept for the helper's signature; every FocusGuard surface is light now
+    /// (AppDelegate forces `.aqua`), so all captures pass `false`.
     private func snapshot<V: View>(_ view: V, width: CGFloat, dark: Bool, to url: URL) throws {
         _ = NSApplication.shared
         NSApp.setActivationPolicy(.accessory)
@@ -86,22 +89,30 @@ final class MarketingCaptureTests: XCTestCase {
 
         let locked = DaemonClient(demo: state(.locked))
         try snapshot(RootView(daemon: locked, notifier: notifier, tab: .sites),
-                     width: w, dark: true, to: dir.appendingPathComponent("01-sites.png"))
+                     width: w, dark: false, to: dir.appendingPathComponent("01-sites.png"))
 
         let pending = DaemonClient(demo: state(.unlockPending))
         try snapshot(RootView(daemon: pending, notifier: notifier, tab: .sites),
-                     width: w, dark: true, to: dir.appendingPathComponent("02-unlock.png"))
+                     width: w, dark: false, to: dir.appendingPathComponent("02-unlock.png"))
 
         try snapshot(UnlockConfirmationView(delayMinutes: 20, windowMinutes: 15, onConfirm: {}, onDismiss: {}),
                      width: 340, dark: false, to: dir.appendingPathComponent("02b-unlock-request.png"))
 
         let sched = DaemonClient(demo: state(.locked))
         try snapshot(RootView(daemon: sched, notifier: notifier, tab: .schedule),
-                     width: w, dark: true, to: dir.appendingPathComponent("03-schedule.png"))
+                     width: w, dark: false, to: dir.appendingPathComponent("03-schedule.png"))
 
         // Groups: a short list so the preset groups show their Block buttons.
         let groups = DaemonClient(demo: state(.locked, blocked: ["x.com", "youtube.com", "reddit.com", "netflix.com"]))
         try snapshot(RootView(daemon: groups, notifier: notifier, tab: .sites, showGroups: true),
-                     width: w, dark: true, to: dir.appendingPathComponent("04-groups.png"))
+                     width: w, dark: false, to: dir.appendingPathComponent("04-groups.png"))
+
+        let focus = DaemonClient(demo: state(.focusSession))
+        try snapshot(RootView(daemon: focus, notifier: notifier, tab: .sites),
+                     width: w, dark: false, to: dir.appendingPathComponent("05-focus.png"))
+
+        let stats = DaemonClient(demo: state(.locked))
+        try snapshot(RootView(daemon: stats, notifier: notifier, tab: .stats),
+                     width: w, dark: false, to: dir.appendingPathComponent("06-stats.png"))
     }
 }

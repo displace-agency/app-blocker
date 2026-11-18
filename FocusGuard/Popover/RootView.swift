@@ -25,14 +25,6 @@ struct RootView: View {
             case .stats: return L10n.Tab.stats
             }
         }
-        var symbol: String {
-            switch self {
-            case .sites: return "globe"
-            case .apps: return "app.badge"
-            case .schedule: return "calendar"
-            case .stats: return "chart.bar.fill"
-            }
-        }
     }
 
     var body: some View {
@@ -53,18 +45,17 @@ struct RootView: View {
             if daemon.browserProfileStale {
                 BrowserProfileBanner(domains: daemon.browserOnlyBlocked.sorted())
             }
-            Divider().overlay(FG.Palette.hairline)
             tabPicker
-            Divider().overlay(FG.Palette.hairline)
             ScrollView { content.padding(FG.Spacing.m) }
                 .frame(height: 286)
-            Divider().overlay(FG.Palette.hairline)
+                .background(FG.canvas)
+            Divider().overlay(FG.hairline)
             actionZone
-            Divider().overlay(FG.Palette.hairline)
+            Divider().overlay(FG.hairline)
             footer
         }
         .frame(width: FG.Layout.popover.width)
-        .background(FG.Palette.bgDark)
+        .background(FG.surface)
         .overlay(ToastOverlay(toasts: daemon.toasts))
         .background(
             Button("") { tab = .sites; addFieldFocused = true }
@@ -78,17 +69,33 @@ struct RootView: View {
     private var style: FG.StatusStyle { daemon.isOffline ? .offline : FG.StatusStyle(daemon.status) }
 
     private var header: some View {
-        HStack(spacing: FG.Spacing.m) {
-            Image(systemName: style.symbol).font(.title2).foregroundColor(style.color)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(L10n.appName).font(.headline)
-                UnlockDots(total: daemon.maxUnlocksPerDay, used: daemon.unlocksToday)
+        HStack(alignment: .top, spacing: FG.Spacing.m) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(L10n.appName).fgTitle()
+                Text(stateSentence).font(FG.captionFont).foregroundColor(FG.inkSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            Spacer()
+            Spacer(minLength: 0)
             StatusPill(style: style, subtitle: countdownSubtitle)
         }
-        .padding(FG.Spacing.m)
+        .padding(.horizontal, FG.Spacing.m)
+        .padding(.top, FG.Spacing.m)
+        .padding(.bottom, FG.Spacing.s)
+        .background(FG.surface)
         .accessibilityElement(children: .contain)
+    }
+
+    /// One caption line that says the state in words.
+    private var stateSentence: String {
+        if daemon.isOffline { return "Can't reach the blocker." }
+        let left = max(0, daemon.maxUnlocksPerDay - daemon.unlocksToday)
+        let budget = "\(left) of \(daemon.maxUnlocksPerDay) unlocks left today."
+        switch daemon.status {
+        case .locked: return "Locked. \(budget)"
+        case .unlockPending: return "Unlock requested. \(left) of \(daemon.maxUnlocksPerDay) left today."
+        case .unlocked: return daemon.outsideScheduledHours ? "Open outside scheduled hours." : "Unlocked. Auto-lock is running."
+        case .focusSession: return "Focus session in progress."
+        }
     }
 
     private var countdownSubtitle: String? {
@@ -102,23 +109,29 @@ struct RootView: View {
     // MARK: - Tabs
 
     private var tabPicker: some View {
-        HStack(spacing: 0) {
+        HStack(spacing: FG.Spacing.l) {
             ForEach(Tab.allCases, id: \.rawValue) { t in
+                let on = tab == t
                 Button { withAnimation(FG.Motion.quick) { tab = t } } label: {
-                    VStack(spacing: 2) {
-                        Image(systemName: t.symbol).font(.system(size: 12))
-                        Text(t.title).font(.system(size: 10))
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, FG.Spacing.s)
-                    .foregroundColor(tab == t ? FG.Palette.emerald : .secondary)
-                    .background(tab == t ? FG.Palette.emerald.opacity(0.1) : Color.clear)
+                    Text(t.title)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(on ? FG.ink : FG.inkSecondary)
+                        .padding(.vertical, FG.Spacing.s)
+                        .overlay(alignment: .bottom) {
+                            Rectangle().fill(on ? FG.ink : Color.clear).frame(height: 1.5)
+                        }
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .keyboardShortcut(KeyEquivalent(Character("\(t.rawValue + 1)")), modifiers: .command)
                 .accessibilityLabel(t.title)
+                .accessibilityAddTraits(on ? .isSelected : [])
             }
+            Spacer(minLength: 0)
         }
+        .padding(.horizontal, FG.Spacing.m)
+        .background(FG.surface)
+        .overlay(alignment: .bottom) { Rectangle().fill(FG.hairline).frame(height: 1) }
     }
 
     @ViewBuilder
@@ -138,104 +151,115 @@ struct RootView: View {
             if daemon.sessionActive {
                 sessionCard
             } else {
-                Menu {
-                    ForEach([25, 50, 90], id: \.self) { mins in
-                        Button("\(mins) minutes") { daemon.startSession(minutes: mins) }
+                switch daemon.status {
+                case .locked:
+                    VStack(spacing: 6) {
+                        HStack(spacing: FG.Spacing.s) {
+                            startFocusMenu
+                            if daemon.unlocksToday >= daemon.maxUnlocksPerDay {
+                                Button {} label: { Text(L10n.Action.budgetExhausted).lineLimit(1).minimumScaleFactor(0.8) }
+                                    .buttonStyle(.fgSecondary).disabled(true)
+                            } else {
+                                Button { NotificationCenter.default.post(name: .focusGuardShowUnlock, object: nil) } label: {
+                                    Text(L10n.Action.requestUnlock)
+                                }
+                                .buttonStyle(.fgSecondary)
+                            }
+                        }
+                        if daemon.isEscalated && daemon.unlocksToday < daemon.maxUnlocksPerDay {
+                            Text("Wait escalated to \(daemon.unlockDelayMinutes) min")
+                                .font(FG.captionFont).foregroundColor(FG.accent)
+                        }
                     }
-                } label: {
-                    Label(L10n.Action.startSession, systemImage: "hourglass")
-                        .frame(maxWidth: .infinity)
+                case .unlockPending:
+                    VStack(spacing: FG.Spacing.s) {
+                        if let deadline = daemon.unlockDeadline {
+                            CountdownText(deadline: deadline, prefix: "Unlocks in ", color: FG.accent)
+                                .font(.system(size: 15, weight: .medium))
+                        }
+                        HStack(spacing: FG.Spacing.s) {
+                            startFocusMenu
+                            Button { daemon.cancelUnlock() } label: { Text(L10n.Action.cancelUnlock) }
+                                .buttonStyle(.fgSecondary)
+                        }
+                    }
+                case .unlocked:
+                    VStack(spacing: FG.Spacing.s) {
+                        if let deadline = daemon.cooldownDeadline {
+                            CountdownText(deadline: deadline, prefix: "Auto-lock in ", color: FG.danger)
+                                .font(.system(size: 12, weight: .medium))
+                        }
+                        HStack(spacing: FG.Spacing.s) {
+                            startFocusMenu
+                            Button { daemon.requestLock() } label: { Text(L10n.Action.lockNow) }
+                                .buttonStyle(.fgSecondary)
+                        }
+                    }
+                case .focusSession:
+                    EmptyView()
                 }
-                .menuStyle(.borderlessButton)
-                .padding(.vertical, 6)
-                .background(FG.Palette.bgCard, in: RoundedRectangle(cornerRadius: FG.Radius.m))
-
-                primaryAction
             }
         }
         .padding(FG.Spacing.m)
+        .background(FG.surface)
     }
 
-    @ViewBuilder
-    private var primaryAction: some View {
-        switch daemon.status {
-        case .locked:
-            if daemon.unlocksToday >= daemon.maxUnlocksPerDay {
-                Button {} label: { Label(L10n.Action.budgetExhausted, systemImage: "lock.fill").frame(maxWidth: .infinity) }
-                    .controlSize(.large).buttonStyle(.borderedProminent).tint(.gray).disabled(true)
-            } else {
-                VStack(spacing: 2) {
-                    Button { NotificationCenter.default.post(name: .focusGuardShowUnlock, object: nil) } label: {
-                        Label(L10n.Action.requestUnlock, systemImage: "lock.open").frame(maxWidth: .infinity)
-                    }
-                    .controlSize(.large).buttonStyle(.borderedProminent).tint(.orange)
-                    if daemon.isEscalated {
-                        Text("Wait escalated to \(daemon.unlockDelayMinutes) min").font(.caption2).foregroundColor(.orange)
-                    }
-                }
+    /// Primary action, equal width with its neighbour; keeps the 25/50/90 minute menu.
+    private var startFocusMenu: some View {
+        Menu {
+            ForEach([25, 50, 90], id: \.self) { mins in
+                Button("\(mins) minutes") { daemon.startSession(minutes: mins) }
             }
-        case .unlockPending:
-            VStack(spacing: 4) {
-                if let deadline = daemon.unlockDeadline {
-                    CountdownText(deadline: deadline, prefix: "Unlocks in ", color: .orange).font(.callout).fontWeight(.semibold)
-                }
-                Button { daemon.cancelUnlock() } label: { Label(L10n.Action.cancelUnlock, systemImage: "xmark").frame(maxWidth: .infinity) }
-                    .controlSize(.large).buttonStyle(.borderedProminent).tint(.gray)
-            }
-        case .unlocked:
-            VStack(spacing: 4) {
-                if let deadline = daemon.cooldownDeadline {
-                    CountdownText(deadline: deadline, prefix: "Auto-lock in ", color: .red).font(.caption).fontWeight(.medium)
-                }
-                Button { daemon.requestLock() } label: { Label(L10n.Action.lockNow, systemImage: "lock").frame(maxWidth: .infinity) }
-                    .controlSize(.large).buttonStyle(.borderedProminent).tint(FG.Palette.emerald)
-            }
-        case .focusSession:
-            EmptyView()
+        } label: {
+            Text(L10n.Action.startSession)
         }
+        .menuStyle(.button)
+        .menuIndicator(.hidden)
+        .buttonStyle(.fgPrimary)
+        .accessibilityLabel(L10n.Action.startSession)
     }
 
     private var sessionCard: some View {
-        VStack(spacing: 4) {
-            HStack(spacing: 6) {
-                Image(systemName: "hourglass").foregroundColor(style.color)
-                Text(L10n.Session.active).font(.callout).fontWeight(.semibold)
-            }
+        VStack(alignment: .leading, spacing: 2) {
+            Text(L10n.Session.title).fgEyebrow()
             if let deadline = daemon.sessionDeadline {
-                CountdownText(deadline: deadline, prefix: "", color: style.color).font(.title3).fontWeight(.bold)
+                CountdownText(deadline: deadline, prefix: "", color: FG.ink).font(FG.bigNumber(28))
             }
-            Text(L10n.Session.subtitle).font(.caption2).foregroundColor(.secondary)
+            Text(L10n.Session.subtitle).fgCaption()
         }
-        .frame(maxWidth: .infinity).padding(FG.Spacing.m)
-        .background(style.color.opacity(0.12), in: RoundedRectangle(cornerRadius: FG.Radius.l))
+        .frame(maxWidth: .infinity, alignment: .leading).padding(FG.Spacing.m)
+        .fgCard()
     }
 
     // MARK: - Footer
 
     private var footer: some View {
         HStack(spacing: FG.Spacing.s) {
+            Circle().fill(daemon.isOffline ? FG.inkTertiary : FG.ink).frame(width: 6, height: 6)
+            Text(daemon.isOffline ? "Offline" : "Active").font(FG.captionFont).foregroundColor(FG.inkSecondary)
             #if !PUBLIC_BUILD
-            Image(systemName: "iphone").font(.caption2).foregroundColor(hasPasscode ? FG.Palette.emerald : .secondary)
+            Text("·").font(FG.captionFont).foregroundColor(FG.inkTertiary)
+            Image(systemName: "iphone").font(.system(size: 10)).foregroundColor(hasPasscode ? FG.ink : FG.inkSecondary)
             if hasPasscode, daemon.status == .unlocked, let code = screenTimePasscode {
                 Button {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(code, forType: .string)
-                } label: { Label(code, systemImage: "key").font(.caption2) }
-                .buttonStyle(.plain).foregroundColor(.orange)
+                } label: { Label(code, systemImage: "key").font(FG.captionFont) }
+                .buttonStyle(.plain).foregroundColor(FG.accent)
             } else {
                 Text(hasPasscode ? "iPhone protected" : "iPhone")
-                    .font(.caption2).foregroundColor(hasPasscode ? FG.Palette.emerald : .secondary)
+                    .font(FG.captionFont).foregroundColor(FG.inkSecondary)
                 if !hasPasscode {
-                    Button("Set Up") { NotificationCenter.default.post(name: .focusGuardShowiPhoneSetup, object: nil) }
-                        .font(.caption2).buttonStyle(.borderedProminent).tint(FG.Palette.emerald).controlSize(.mini)
+                    Button("Set up") { NotificationCenter.default.post(name: .focusGuardShowiPhoneSetup, object: nil) }
+                        .buttonStyle(.fgSecondarySmall)
                 }
             }
             #endif
             Spacer()
-            Circle().fill(daemon.isOffline ? Color.red : FG.Palette.emerald).frame(width: 6, height: 6)
-            Text(daemon.isOffline ? "Offline" : "Active").font(.caption2).foregroundColor(.secondary)
+            Text("By Displace").fgEyebrow()
         }
         .padding(.horizontal, FG.Spacing.m).padding(.vertical, FG.Spacing.s)
+        .background(FG.surface)
     }
 
     private var hasPasscode: Bool { screenTimePasscode != nil }
@@ -255,7 +279,7 @@ struct RootView: View {
 struct CountdownText: View {
     let deadline: Date
     var prefix: String = ""
-    var color: Color = .primary
+    var color: Color = FG.ink
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in

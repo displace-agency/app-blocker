@@ -12,9 +12,10 @@ struct AppsTab: View {
     var body: some View {
         VStack(spacing: FG.Spacing.s) {
             Button(action: chooseApp) {
-                HStack { Image(systemName: "plus.app"); Text(L10n.Apps.choose); Spacer() }
-                    .font(.caption).padding(FG.Spacing.s)
-                    .background(FG.Palette.bgInset, in: RoundedRectangle(cornerRadius: FG.Radius.m))
+                HStack { Text(L10n.Apps.choose); Spacer(); Image(systemName: "plus").font(.system(size: 11, weight: .semibold)) }
+                    .font(FG.bodyFont).foregroundColor(FG.ink)
+                    .fgField()
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 
@@ -26,8 +27,7 @@ struct AppsTab: View {
                 list
             }
 
-            Label(L10n.Apps.warning, systemImage: "exclamationmark.triangle")
-                .font(.caption2).foregroundColor(.orange)
+            Text(L10n.Apps.warning).fgCaption()
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
@@ -41,9 +41,10 @@ struct AppsTab: View {
                     HStack(spacing: 6) {
                         ForEach(available, id: \.self) { name in
                             Button { daemon.addApp(name) } label: {
-                                Text(name).font(.caption2)
-                                    .padding(.horizontal, 8).padding(.vertical, 4)
-                                    .background(FG.Palette.bgCard, in: Capsule())
+                                Text(name).font(.system(size: 11, weight: .medium)).foregroundColor(FG.ink)
+                                    .padding(.horizontal, 10).frame(height: 24)
+                                    .background(FG.surface, in: Capsule())
+                                    .overlay(Capsule().stroke(FG.border, lineWidth: 1))
                             }
                             .buttonStyle(.plain)
                         }
@@ -54,15 +55,18 @@ struct AppsTab: View {
     }
 
     private var list: some View {
-        ScrollView {
+        VStack(alignment: .leading, spacing: FG.Spacing.xs) {
+            Text("Blocked apps · \(daemon.blockedApps.count)").fgEyebrow()
+                .frame(maxWidth: .infinity, alignment: .leading)
             LazyVStack(spacing: 0) {
                 ForEach(daemon.blockedApps, id: \.self) { app in
                     row(app)
-                    if app != daemon.blockedApps.last { Divider().overlay(FG.Palette.hairline) }
+                    if app != daemon.blockedApps.last { Divider().overlay(FG.hairline) }
                 }
             }
+            .padding(.horizontal, FG.Spacing.m)
+            .fgCard()
         }
-        .frame(maxHeight: 190)
     }
 
     private func row(_ app: String) -> some View {
@@ -70,29 +74,27 @@ struct AppsTab: View {
         return HStack(spacing: FG.Spacing.s) {
             if let icon = appIcon(for: app) {
                 Image(nsImage: icon).resizable().frame(width: 18, height: 18)
-            } else {
-                Image(systemName: "app.dashed").foregroundColor(.secondary)
             }
-            Text(app).font(.caption)
+            Text(app).font(FG.bodyFont).foregroundColor(FG.ink)
             Spacer()
             if pending {
                 ProgressView().controlSize(.small).scaleEffect(0.6)
             } else if canRemove {
-                Button { daemon.removeApp(app) } label: { Image(systemName: "xmark.circle.fill").foregroundColor(.secondary) }
+                Button { daemon.removeApp(app) } label: { Image(systemName: "xmark").font(.system(size: 10, weight: .medium)).foregroundColor(FG.inkSecondary) }
                     .buttonStyle(.plain).accessibilityLabel("Unblock \(app)")
             }
         }
         .opacity(pending ? 0.55 : 1)
-        .padding(.vertical, 6)
+        .frame(height: 32)
     }
 
     private var empty: some View {
-        VStack(spacing: FG.Spacing.s) {
-            Image(systemName: "app.badge").font(.title2).foregroundColor(Color(white: 0.3))
-            Text(L10n.Apps.empty).font(.caption).foregroundColor(.secondary)
-            Text(L10n.Apps.onlyApplications).font(.caption2).foregroundColor(Color(white: 0.4))
+        VStack(spacing: 4) {
+            Text(L10n.Apps.empty).font(FG.bodyFont).foregroundColor(FG.ink)
+            Text(L10n.Apps.onlyApplications).fgCaption()
         }
         .frame(maxWidth: .infinity).padding(.vertical, FG.Spacing.l)
+        .fgCard()
     }
 
     private func appIcon(for name: String) -> NSImage? {

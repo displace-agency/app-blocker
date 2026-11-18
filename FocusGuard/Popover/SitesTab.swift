@@ -25,62 +25,65 @@ struct SitesTab: View {
 
     var body: some View {
         VStack(spacing: FG.Spacing.s) {
+            addRow
+            if let inputError { caption(inputError, color: FG.danger) }
+            FGSegmented(options: [(false, L10n.Sites.myList), (true, L10n.Sites.groups)], selection: $showGroups)
             if showGroups {
-                GroupsList(daemon: daemon, showGroups: $showGroups)
+                GroupsList(daemon: daemon)
             } else {
-                addRow
-                if let inputError { caption(inputError, color: .red) }
                 list
-                Button { withAnimation(FG.Motion.quick) { showGroups = true } } label: {
-                    HStack { Image(systemName: "square.grid.2x2"); Text(L10n.Sites.groups); Spacer(); Image(systemName: "chevron.right").font(.caption2) }
-                        .font(.caption)
-                }
-                .buttonStyle(.plain).foregroundColor(FG.Palette.emerald)
             }
         }
     }
 
     private var addRow: some View {
         HStack(spacing: FG.Spacing.s) {
-            Image(systemName: "magnifyingglass").font(.caption).foregroundColor(.secondary)
             TextField(L10n.Sites.addPlaceholder, text: $newDomain)
                 .textFieldStyle(.plain)
+                .font(FG.bodyFont).foregroundColor(FG.ink)
                 .focused($addFieldFocused)
                 .onSubmit(submit)
-            Button(action: submit) { Image(systemName: "plus.circle.fill").foregroundColor(FG.Palette.emerald) }
-                .buttonStyle(.plain)
-                .disabled(newDomain.trimmingCharacters(in: .whitespaces).isEmpty || inputError != nil)
-                .accessibilityLabel("Block site")
+            Button(action: submit) {
+                Image(systemName: "plus").font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(addDisabled ? FG.inkTertiary : FG.ink)
+            }
+            .buttonStyle(.plain)
+            .disabled(addDisabled)
+            .accessibilityLabel("Block site")
         }
-        .padding(FG.Spacing.s)
-        .background(FG.Palette.bgInset, in: RoundedRectangle(cornerRadius: FG.Radius.m))
+        .fgField(focused: addFieldFocused)
     }
+
+    private var addDisabled: Bool { newDomain.trimmingCharacters(in: .whitespaces).isEmpty || inputError != nil }
 
     @ViewBuilder
     private var list: some View {
         if daemon.blockedDomains.isEmpty {
             emptyState(L10n.Sites.empty)
         } else {
-            ScrollView {
+            VStack(alignment: .leading, spacing: FG.Spacing.xs) {
+                Text("\(L10n.Sites.yourList) · \(daemon.blockedDomains.count)").fgEyebrow()
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 LazyVStack(spacing: 0) {
                     ForEach(daemon.blockedDomains, id: \.self) { domain in
                         row(domain)
-                        if domain != daemon.blockedDomains.last { Divider().overlay(FG.Palette.hairline) }
+                        if domain != daemon.blockedDomains.last { Divider().overlay(FG.hairline) }
                     }
                 }
+                .padding(.horizontal, FG.Spacing.m)
+                .fgCard()
             }
-            .frame(maxHeight: 200)
-            if !canRemove { caption(L10n.Sites.removeHint, color: Color(white: 0.45)) }
+            if !canRemove { caption(L10n.Sites.removeHint, color: FG.inkSecondary) }
         }
     }
 
     private func row(_ domain: String) -> some View {
         let pending = daemon.pendingAddDomains.contains(domain) || daemon.pendingRemoveDomains.contains(domain)
         return HStack {
-            Text(domain).font(.system(size: 12, design: .monospaced)).lineLimit(1)
+            Text(domain).font(FG.domainFont).foregroundColor(FG.ink).lineLimit(1)
             if daemon.browserOnlyBlocked.contains(domain) {
                 Image(systemName: "lock.fill")
-                    .font(.system(size: 9)).foregroundColor(.orange)
+                    .font(.system(size: 9)).foregroundColor(FG.accent)
                     .help("Still blocked in your browser by the installed profile, separate from FocusGuard's live list.")
             }
             Spacer()
@@ -88,13 +91,13 @@ struct SitesTab: View {
                 ProgressView().controlSize(.small).scaleEffect(0.6)
             } else if canRemove {
                 Button { daemon.removeDomain(domain) } label: {
-                    Image(systemName: "xmark.circle.fill").foregroundColor(.secondary)
+                    Image(systemName: "xmark").font(.system(size: 10, weight: .medium)).foregroundColor(FG.inkSecondary)
                 }
                 .buttonStyle(.plain).accessibilityLabel("Unblock \(domain)")
             }
         }
         .opacity(pending ? 0.55 : 1)
-        .padding(.vertical, 6)
+        .frame(height: 26)
     }
 
     private func submit() {
@@ -105,14 +108,12 @@ struct SitesTab: View {
     }
 
     private func caption(_ text: String, color: Color) -> some View {
-        Text(text).font(.caption2).foregroundColor(color).frame(maxWidth: .infinity, alignment: .leading)
+        Text(text).font(FG.captionFont).foregroundColor(color).frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func emptyState(_ text: String) -> some View {
-        VStack(spacing: FG.Spacing.s) {
-            Image(systemName: "globe").font(.title2).foregroundColor(Color(white: 0.3))
-            Text(text).font(.caption).foregroundColor(.secondary)
-        }
-        .frame(maxWidth: .infinity).padding(.vertical, FG.Spacing.xl)
+        Text(text).fgCaption()
+            .frame(maxWidth: .infinity).padding(.vertical, FG.Spacing.xl)
+            .fgCard()
     }
 }
