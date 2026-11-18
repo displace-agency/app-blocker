@@ -49,9 +49,9 @@ cat > "$BUILD_DIR/FocusGuard.app/Contents/Info.plist" << 'PLIST'
     <key>CFBundleDisplayName</key>
     <string>FocusGuard</string>
     <key>CFBundleVersion</key>
-    <string>1.1.0</string>
+    <string>1.2.0</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.1.0</string>
+    <string>1.2.0</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleIconFile</key>

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Builds build/FocusGuard-Installer.pkg (v1.1.0) from the output of Scripts/build.sh.
+# Builds build/FocusGuard-Installer.pkg (v1.2.0) from the output of Scripts/build.sh.
 # Mirrors what Scripts/install.sh installs: daemon + LaunchDaemon, menu-bar app, the
 # login agent, and /etc/focusguard defaults (never overwriting an existing list/config).
 # RELEASE NOTE: the public pkg must be built with FOCUSGUARD_PUBLIC=1 (PUBLIC_BUILD flag),
@@ -13,7 +13,7 @@ BUILD_DIR="$PROJECT_DIR/build"
 PKG_DIR="$BUILD_DIR/pkg-root"
 SCRIPTS_PKG="$BUILD_DIR/pkg-scripts"
 OUTPUT="$BUILD_DIR/FocusGuard-Installer.pkg"
-VERSION="1.1.0"
+VERSION="1.2.0"
 
 echo "=== Creating FocusGuard $VERSION .pkg Installer ==="
 
